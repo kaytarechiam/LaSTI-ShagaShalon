@@ -1,6 +1,13 @@
 {
   "type": "module",
   "scripts": {
-    "serve": "node serve.js"
+    "serve": "node serve.js",
+    "db:init:dev": "node backend/postgres/init-dev.js",
+    "db:smoke:dev": "node ../tests/integration/neon-smoke.mjs",
+    "db:seed:demo": "node backend/postgres/seed-demo.js",
+    "test": "node --test ../tests/unit/*.test.mjs ../tests/integration/reservation-confirmation/*.test.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
   }
 }

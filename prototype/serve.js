@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import http from 'node:http';
 import { createReservationApi } from './backend/reservation-api.js';
+import { createPostgresDatabase } from './backend/postgres/database.js';
+import { createPostgresReservationApi } from './backend/postgres/reservation-api.js';
+import { createPostgresOperations } from './backend/postgres/operations.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -160,7 +163,8 @@ async function main() {
   }
   const inside = (file) => { const relative = path.relative(root, file); return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative); };
   const bookingEnabled = root === path.dirname(fileURLToPath(import.meta.url));
-  const booking = bookingEnabled ? createReservationApi(root) : null;
+  const postgres = bookingEnabled && process.env.DATABASE_URL ? createPostgresDatabase(process.env.DATABASE_URL) : null;
+  const booking = bookingEnabled ? (postgres ? await createPostgresReservationApi(postgres, { operations: createPostgresOperations(postgres) }) : createReservationApi(root)) : null;
   const server = http.createServer(async (req, res) => {
     const started = performance.now(); res.once('finish', () => record(req,res,started));
     const respond = (status, text) => { res.writeHead(status, {'Content-Type':'text/plain; charset=utf-8'}); res.end(req.method === 'HEAD' ? undefined : text); };
@@ -183,7 +187,8 @@ async function main() {
     }
     const teamRoutes = {'/resepsionis':'staff','/capster':'capster','/manajemen':'manager'};
     const bookingPage = booking && (['/login','/daftar','/reservasi','/akun','/beranda','/profil'].includes(normalized) || Object.hasOwn(teamRoutes,normalized));
-    if (bookingPage && !['/login','/daftar'].includes(normalized) && !booking.getAccount(req)) {
+    const currentAccount = bookingPage ? await booking.getAccount(req) : null;
+    if (bookingPage && !['/login','/daftar'].includes(normalized) && !currentAccount) {
       const draft=new URLSearchParams();
       for (const service of url.searchParams.getAll('layanan').slice(0,20)) {
         if (/^[a-z0-9-]{1,50}$/.test(service)) draft.append('layanan',service);
@@ -198,7 +203,7 @@ async function main() {
       res.end();
       return;
     }
-    if (bookingPage && Object.hasOwn(teamRoutes,normalized) && booking.getAccount(req)?.role!==teamRoutes[normalized]) {
+    if (bookingPage && Object.hasOwn(teamRoutes,normalized) && currentAccount?.role!==teamRoutes[normalized]) {
       respond(403,'Halaman ini khusus bagi peran tim salon yang sesuai.');
       return;
     }
@@ -229,7 +234,7 @@ async function main() {
           if (inApp) headers['Content-Security-Policy'] =
             "default-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
           const content = await fs.promises.readFile(real,'utf8');
-          const html = inApp ? content : content.replace(/<\/body>/i,
+          const html = inApp || content.includes('/reservation-ui/landing.js') ? content : content.replace(/<\/body>/i,
             '<link rel="stylesheet" href="/reservation-ui/shared-nav.css"><script type="module" src="/reservation-ui/landing.js"></script></body>');
           headers['Content-Length'] = Buffer.byteLength(html);
           res.writeHead(200,headers);

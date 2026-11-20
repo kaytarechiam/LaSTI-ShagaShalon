@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "routes": [
+    { "src": "^/(?:login|daftar|reservasi|akun|beranda|profil|resepsionis|capster|manajemen|reservation-ui/.*)$", "headers": { "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'" }, "continue": true },
+    { "src": "^/backend(?:/.*)?$", "status": 404 },
+    { "src": "^/(?:package(?:-lock)?\\.json|serve\\.js|NEON-VERCEL\\.md|RESERVASI\\.md|OPERASIONAL\\.md|vercel\\.json)$", "status": 404 },
+    { "src": "^/api/(.*)$", "dest": "/api/index?__route=$1" },
+    { "src": "^/reservation-ui/catalog\\.js$", "dest": "/backend/catalog.js" },
+    { "src": "^/(?:visit(?:\\.html)?|subpages/visit\\.html)$", "status": 302, "headers": { "Location": "/reservasi" } },
+    { "src": "^/(?:login|daftar|reservasi|akun|beranda|profil|resepsionis|capster|manajemen)/?$", "dest": "/reservation-ui/index.html" },
+    { "handle": "filesystem" },
+    { "src": "^/([a-zA-Z0-9_-]+)$", "dest": "/subpages/$1.html" }
+  ]
+}

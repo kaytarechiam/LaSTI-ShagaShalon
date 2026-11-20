@@ -59,6 +59,9 @@ function contact(data) {
 }
 
 export function createReservationApi(root, {memory = false} = {}) {
+  if (!memory && (process.env.DATABASE_URL || process.env.VERCEL)) {
+    throw new Error('Backend PostgreSQL belum terhubung; server SQLite tidak dapat digunakan dengan DATABASE_URL atau Vercel.');
+  }
   const folder = join(process.env.LOCALAPPDATA || homedir(), 'ShagaSalonPrototype');
   if (!memory) mkdirSync(folder,{recursive:true});
   const db = new DatabaseSync(memory ? ':memory:' : join(folder,digest(root).slice(0,16)+'.sqlite'));
