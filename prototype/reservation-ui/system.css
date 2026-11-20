@@ -1,0 +1,58 @@
+/* Navigasi sistem memakai palet dan huruf Shaga; situs publik tetap Framer. */
+.system-page #shared-nav { position:static; pointer-events:auto; }
+.system-shell { display:flex; align-items:center; gap:clamp(24px,4vw,65px); padding:16px clamp(24px,5vw,72px); background:#fffaf5; border-bottom:1px solid #e2d4c8; }
+.system-brand { display:flex; flex-direction:column; flex-shrink:0; color:#35261f!important; text-decoration:none; line-height:1; }
+.system-brand span { font:400 32px/1 'Shaga Serif',Georgia,serif; letter-spacing:-.04em; }
+.system-brand small { font-size:9px; font-weight:700; letter-spacing:.19em; margin-top:4px; }
+.system-desktop { display:flex; align-items:center; gap:5px; flex:1; }
+.system-link,.system-site { display:flex; align-items:center; gap:10px; color:#705d51!important; text-decoration:none; font-size:14px; font-weight:650; padding:11px 13px; border-radius:11px; min-height:44px; }
+.system-link svg,.system-site svg { width:19px; height:19px; flex:none; }
+.system-link:hover,.system-link.is-active { background:#eee1d6; color:#52352b!important; }
+.system-secondary { display:flex; align-items:center; gap:10px; }
+.system-page .system-logout { background:transparent; color:#52352b; border-color:#d4c3b4; padding:8px 15px; }
+.system-mobile { display:none; }
+.system-page main { margin-top:0; }
+.system-page .editorial { top:30px; }
+.system-page .booking-layout { padding-top:clamp(28px,4vw,56px); }
+.system-page .booking-content h2 { font:400 27px/1.2 'Shaga Serif',Georgia,serif; margin:32px 0 14px; }
+.system-page .profile-links { border-top:1px solid var(--border); margin-top:34px; padding-top:20px; display:flex; align-items:center; justify-content:space-between; gap:15px; }
+.system-page .profile-back { color:var(--brown); background:transparent; border:1px solid var(--border); margin:0 0 24px; padding:7px 14px; font-size:14px; }
+.system-team { background:#f7f4f0; }
+.system-team #shared-nav { position:fixed; inset:0 auto 0 0; width:236px; z-index:6; }
+.system-team .system-shell { height:100%; flex-direction:column; align-items:stretch; gap:34px; padding:34px 18px 22px; border:0; border-right:1px solid #e5dbd2; }
+.system-team .system-brand { padding:0 12px; }
+.system-team .system-desktop { display:flex; flex-direction:column; align-items:stretch; gap:5px; }
+.system-team .system-link { padding:13px 15px; }
+.system-team .system-secondary { align-items:stretch; flex-direction:column; border-top:1px solid #e8dcd2; padding-top:15px; }
+.system-team .system-site { padding:9px 12px; }
+.system-team main { margin-left:236px; max-width:none; padding:48px clamp(28px,4vw,64px) 80px; display:block; }
+.system-team .editorial { display:none; }
+.system-team .booking-content { max-width:1200px; margin:auto; padding:0; }
+.system-team .booking-content h1 { font-size:clamp(34px,3.6vw,48px); }
+.system-team .ops-top { padding-bottom:24px; }
+.system-team .ops-controls { margin:24px 0; padding:18px; background:#fffdfb; border:1px solid #e9ded5; border-radius:14px; }
+.system-team .ops-metrics div,.system-team .ops-record,.system-team .ops-panel { background:#fffdfb; border-color:#e9ded5; }
+.system-team .ops-metrics strong { color:#754d3e; }
+.system-team .ops-records { margin:16px 0 30px; }
+.system-team .summary { max-width:700px; }
+.system-team .booking-content > form { max-width:700px; }
+@media(max-width:800px) {
+ .system-page #shared-nav { position:static; width:auto; }
+ .system-page .system-shell { height:auto; display:flex; flex-direction:row; padding:13px 20px; border:0; border-bottom:1px solid #e5dbd2; }
+ .system-page .system-brand { padding:0; }
+ .system-page .system-brand span { font-size:28px; }
+ .system-page .system-desktop,.system-page .system-secondary { display:none; }
+ .system-page .system-mobile { display:flex; position:fixed; z-index:20; bottom:max(12px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); width:min(calc(100% - 28px),480px); justify-content:space-around; gap:2px; padding:7px; border:1px solid #ddcabe; border-radius:22px; background:#fffaf6f7; box-shadow:0 8px 30px #39271c24; }
+ .system-page .system-mobile .system-link { flex:1; justify-content:center; flex-direction:column; gap:2px; padding:6px 3px; min-width:0; min-height:54px; font-size:11px; }
+ .system-page .system-mobile .system-link svg { width:20px; height:20px; }
+ .system-page main,.system-team main { margin:0; padding:24px 20px calc(130px + env(safe-area-inset-bottom)); }
+ .system-page .editorial { position:static; }
+ .system-page .editorial a { display:none; }
+ .system-page .booking-content { padding:0; }
+ .system-team .booking-content { width:100%; }
+ .system-page .booking-content h1 { font-size:clamp(36px,9vw,48px); }
+ .system-page .booking-layout { gap:22px; }
+ .system-team .ops-top { gap:16px; }
+ .system-team .ops-record { grid-template-columns:1fr; }
+ .system-page.keyboard-open .system-mobile { visibility:hidden; }
+}

@@ -1,0 +1,47 @@
+/* The public header keeps its original Framer styling and positioning. */
+.shaga-booking-entry > [data-framer-name="Fields"] { display:none!important; }
+#shared-nav { position:fixed; inset:0 0 auto; z-index:6; pointer-events:none; }
+#shared-nav a, #shared-nav button { pointer-events:auto; }
+#shared-nav > .booking-header { pointer-events:auto; background:#f6efe7; }
+.booking-session-footer { padding:0 clamp(20px,4vw,58px) 24px; max-width:1360px; margin:0 auto; }
+.booking-page main { margin-top:88px; }
+.booking-page .editorial { top:90px; }
+@media(max-width:740px) { #shared-nav .framer-qiT0V { padding-inline:10px; } }
+#shared-nav {
+  --token-6406c1af-6f1c-4e8f-b2c3-b02b1486d109: #f7f3ee;
+  --token-48ec8add-2964-415f-b6f4-23e765ef0b4e: #e9dfd6;
+  --token-b8b88974-e8c8-420a-ab0e-fe094e74c68d: #cfc0b5;
+  --token-50b752a5-d450-43b1-93de-239a71db7f37: #c17b65;
+  --token-2ddfb4b0-e2a1-4651-80b0-52240267f6fc: #f0c4aa;
+  --token-805984a8-b570-40b1-8afb-91817b3ddc69: #705e56;
+  --token-167dda3b-6367-44ac-a534-7c29b5da763c: #5a4d45;
+  --token-b660a593-db64-4c77-9c11-3fb61e729665: #3a2820;
+  --token-607e14b0-1bb9-40a5-b1a5-19cd8ad171d8: #2a1c16;
+  --token-d942c00e-ca72-49e0-b3cc-23764e21732d: #5a4237;
+  --token-6128a28b-dfe1-4766-81b2-430aebc2c64a: #21191529;
+  --token-551456fa-52ba-4745-84c4-84b4174abab4: #f7f3ee24;
+  --token-84bc5c36-ae92-4619-92e3-18f1c93ed315: #5f5b38;
+  --token-84a5cf92-55ab-4820-b214-247a7b06dee6: #1e1a0e;
+  --token-cbff273e-a414-469e-a48a-4d84c9cbed50: #5e9e5a;
+  --token-a4edae90-f5e7-4f42-bdb1-b259929c0e97: #5e9e5a33;
+  --token-8f8134a9-8182-4491-b515-c1527b03f691: #ece6cceb;
+  --token-8659990a-f3a2-4dee-9365-7e3881419d59: #f4eee6c7;
+  --token-6f89a5ed-9ba5-41d0-bdf9-acb3816d3d6c: #f4eee666;
+  --token-96dbf834-b634-444b-9b4a-38a640e179c4: #f4eee61a;
+  --token-6c6fafb9-85f7-4ee3-8499-4d7c6529a9e9: #2a201cd1;
+  --token-ca6d6a67-2c56-4486-8b6e-ae00db4a8c2a: #2a201c4d;
+  --token-14d2af03-23db-43ea-aba0-6268aca3b6e4: #7fb77a;
+  --token-664c932f-0824-490a-ad68-61125df693ee: #f7f3eee6;
+  --token-81aa53c8-3521-4fb0-b3a0-1e37b4fc61a2: #f7f3eebf;
+  --token-f2f5c209-176c-42cc-a81f-599f826f6d97: #f7f3ee9e;
+  --token-1317da14-6e0e-422c-99dd-15e78f5337dd: #f7f3ee3d;
+  --token-aa27c467-2c68-4379-9c68-35a277bee920: #f7f3ee12;
+  --token-022c1dd0-8f0e-4347-9396-988e05df00d2: #2a1c160f;
+  --token-39d21343-8826-465e-8d5b-6fa6b1d7d216: #1e161066;
+  --token-bcbab49e-e80e-4cfb-9500-211126fde345: #1e1610a3;
+  --token-2d783b04-a164-4c2e-bc48-01e7dcf1e09a: #f0c4aa33;
+  --token-2f7ecad2-9014-4c4a-ae7f-57c241291425: #2a1c16c7;
+  --token-36c46625-b42e-4290-989c-05cb3233e5cf: #1a120e;
+  --token-f0b3604a-2dab-4f5e-9790-adcb2b968a7a: #a05a46;
+  --token-94707c25-892f-41bd-9bd5-d7ffe7ba5785: #2a1c169e;
+}

@@ -1,0 +1,27 @@
+.ops-layout { display:block; max-width:1250px; }
+.ops-layout .editorial { display:none; }
+.ops-layout .booking-content { padding-top:0; }
+.ops-top { display:flex; align-items:end; justify-content:space-between; gap:18px; flex-wrap:wrap; padding-bottom:24px; border-bottom:1px solid var(--border); }
+.ops-top h1 { margin-bottom:0; }
+.ops-top .step { margin-bottom:8px; }
+.ops-tabs,.ops-actions { display:flex; align-items:start; flex-wrap:wrap; gap:10px; margin:16px 0; }
+.booking-content .ops-controls,.ops-fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr)); gap:14px; align-items:end; }
+.ops-controls .message { grid-column:1/-1; }
+.ops-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,155px),1fr)); gap:12px; }
+.ops-metrics div,.ops-record,.ops-panel { background:#fffbf7; border:1px solid var(--border); border-radius:13px; padding:18px; }
+.ops-metrics strong { font:400 42px/1 'Shaga Serif',Georgia,serif; display:block; margin-bottom:8px; }
+.ops-metrics span,.ops-record p { color:var(--muted); font-size:14px; }
+.ops-records { list-style:none; padding:0; display:grid; gap:10px; }
+.ops-record { display:grid; grid-template-columns:1.2fr 1fr auto; gap:18px; align-items:start; }
+.ops-record p { margin:4px 0; overflow-wrap:anywhere; }
+.ops-record h3 { margin:7px 0 1px; }
+.ops-tag { display:inline-block; background:#f0dfd4; color:#633929; border-radius:30px; padding:4px 10px; font-size:13px; }
+.ops-panel { margin-bottom:12px; }
+.ops-panel summary,.ops-record summary { cursor:pointer; font-weight:650; }
+.ops-panel form,.ops-panel .ops-fields,.ops-record details form { margin-top:14px; }
+.ops-panel fieldset { min-width:0; margin:16px 0; padding:14px; border:1px solid var(--border); border-radius:8px; }
+.booking-content .ops-check { display:flex; gap:8px; align-items:center; min-height:44px; }
+.booking-content .ops-check input { width:18px; min-height:auto; accent-color:var(--accent); }
+.ops-empty { padding:18px; border:1px dashed var(--border); border-radius:10px; }
+#ops-message { color:#6a3928; margin:12px 0; }
+@media(max-width:740px) { .ops-record { grid-template-columns:1fr; gap:8px; } }

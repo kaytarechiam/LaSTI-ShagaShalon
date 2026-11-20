@@ -1,0 +1,223 @@
+const names = {staff:'Resepsionis',capster:'Capster',manager:'Manajemen'};
+const status = {REQUESTED:'Menunggu konfirmasi',CONFIRMED:'Terkonfirmasi',WAITING:'Menunggu layanan',ACTIVE:'Sedang dilayani',DONE:'Selesai'};
+const rulesLabels={open:'Jam buka',close:'Jam tutup Senin–Sabtu',sunday:'Jam tutup Minggu',breakStart:'Mulai istirahat',breakEnd:'Akhir istirahat',buffer:'Jeda antarlayanan (menit)',early:'Check-in sebelum jadwal (menit)',late:'Batas terlambat check-in (menit)'};
+
+export async function showOperations({account,app,api,escape:e,date,time,price}) {
+  document.querySelector('.booking-layout').classList.add('ops-layout');
+  document.title = names[account.role]+' · Shaga Salon';
+  const currentDay = new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Jakarta'}).format(new Date());
+  let day=currentDay, to=currentDay, filter='', response, walkKey=crypto.randomUUID();
+  let generation=0;
+  const role=account.role;
+  let section=role==='manager'?(location.hash==='#pengaturan'?'settings':'overview'):'desk';
+  const option=(value,label,selected=false)=>`<option value="${e(value)}"${selected?' selected':''}>${e(label)}</option>`;
+  const button=(label,action,type='button')=>`<button type="${type}" data-action="${action}">${e(label)}</button>`;
+  const formAlert='<p class="message" role="alert"></p>';
+  const formData=form=>Object.fromEntries(new FormData(form));
+  const capsterName=id=>response.settings.capsters.find(x=>x.id===id)?.name || id;
+  const formatTime=value=>value ? time.format(value)+' WIB' : '—';
+  const activeChoices=items=>items.filter(x=>x.active).map(x=>option(x.id,x.name)).join('');
+  const heading=()=>({staff:'Reservasi dan kedatangan',capster:'Jadwal pelayanan',manager:section==='settings'?'Pengaturan salon':'Ringkasan operasional'})[role];
+
+  function controls() {
+    const staffFilter = '<label>Status<select name="status">'+option('','Semua status')+
+      Object.entries(status).map(([key,label])=>option(key,label,filter===key)).join('')+'</select></label>';
+    return `<form id="ops-date" class="ops-controls"><label>${role==='manager'?'Dari tanggal':'Tanggal'}
+      <input type="date" value="${e(day)}" name="day" required></label>
+      ${role==='manager'?`<label>Sampai tanggal<input type="date" value="${e(to)}" name="to" required></label>`:''}
+      ${role==='staff'?staffFilter:''}
+      ${button('Tampilkan','filter','submit')}${formAlert}</form>`;
+  }
+  function staffActions(r) {
+    if (role!=='staff' || r.visit_status || r.status!=='CONFIRMED' || r.day!==currentDay) return '';
+    return `<button type="button" data-action="check-in" data-id="${e(r.id)}">Check-in</button>`;
+  }
+  function capsterActions(r) {
+    if (role!=='capster' || r.day!==currentDay) return '';
+    if (r.visit_status==='WAITING') return `<div class="ops-actions">
+      <button type="button" data-action="start" data-id="${e(r.id)}">Mulai sesi</button>
+      ${r.items.length===1?`<details><summary>Sesuaikan hasil konsultasi</summary>
+      <form data-form="adjust" data-id="${e(r.id)}">
+        <label>Layanan<select name="service">${response.settings.services.filter(x=>x.active).map(x=>option(x.id,x.name,x.id===r.service)).join('')}</select></label>
+        <label>Capster<select name="capster">${response.settings.capsters.filter(x=>x.active).map(x=>option(x.id,x.name,x.id===r.capster)).join('')}</select></label>
+        <label class="ops-check"><input type="checkbox" name="approved" required>Pelanggan menyetujui perubahan</label>
+        ${button('Simpan perubahan','adjust','submit')}${formAlert}</form></details>`:'<small>Penyesuaian untuk beberapa layanan belum tersedia.</small>'}</div>`;
+    if (r.visit_status==='ACTIVE') return `<div class="ops-actions"><form data-form="estimate" data-id="${e(r.id)}">
+      <label>Sisa waktu (menit)<input type="number" name="minutes" min="1" max="480" step="1" required></label>
+      ${button('Perbarui estimasi','estimate','submit')}${formAlert}</form>
+      <button type="button" data-action="finish" data-id="${e(r.id)}">Selesaikan sesi</button></div>`;
+    return '';
+  }
+  function cards(rows) {
+    if (!rows.length) return '<p class="ops-empty">Belum ada data untuk pilihan ini.</p>';
+    return '<ul class="ops-records">'+rows.map(r=>`<li><article class="ops-record">
+      <div><span class="ops-tag">${status[r.visit_status||r.status]||'—'}</span>
+        <h3>${e(r.name)}</h3><p>${e(capsterName(r.capster))}</p>
+        ${r.items.map(item=>`<p>${e(item.name)} · ${e(price.format(item.price))} · ${item.duration} menit</p>`).join('')}
+        <p><strong>Total ${e(price.format(r.booked_price))} · ${r.booked_duration} menit</strong></p>
+        <p>${e(date.format(r.start))} · ${e(formatTime(r.start))}${r.code?' · '+e(r.code):''}</p>
+        ${role==='staff'?'<p>'+e(r.phone)+'</p>':''}
+      </div>
+      ${r.ticket?`<div class="ops-ticket"><strong>Antrean ${r.ticket}</strong>
+        <p>${e(r.channel==='WALK_IN'?'Walk-in':'Reservasi')} · Tiba ${e(formatTime(r.arrived))}</p>
+        ${r.eta?'<p>Perkiraan mulai '+e(formatTime(r.eta))+'</p>':''}
+        ${r.estimate?'<p>Perkiraan selesai '+e(formatTime(r.estimate))+'</p>':''}
+        ${r.started?'<p>Mulai '+e(formatTime(r.started))+(r.ended?' · Selesai '+e(formatTime(r.ended)):'')+'</p>':''}</div>`:''}
+      ${staffActions(r)}${capsterActions(r)}</article></li>`).join('')+'</ul>';
+  }
+  function walkInPanel() {
+    return `<details class="ops-panel"><summary>Terima pelanggan walk-in</summary>
+      <p>Pilih jam yang cukup untuk layanan dan jeda salon hari ini.</p>
+      <form id="walk-in">
+      <div class="ops-fields">
+        <label>Nama pelanggan<input name="name" required minlength="2" maxlength="100"></label>
+        <label>Nomor telepon<input name="phone" type="tel" required maxlength="22"></label>
+        <label>Layanan<select name="service" required>${option('','Pilih layanan')}${activeChoices(response.settings.services)}</select></label>
+        <label>Capster<select name="capster" required>${option('','Pilih layanan dahulu')}</select></label>
+        <label>Jam tersedia<select name="start" required disabled>${option('','Pilih capster dahulu')}</select></label>
+      </div>
+      <p id="walk-status" role="status"></p>
+      ${button('Terima dan buat tiket','walk-in','submit')}${formAlert}</form></details>`;
+  }
+  function overview() {
+    const rows=response.rows;
+    const late=rows.filter(r=>(r.eta||r.started||0)>r.start+60000).length;
+    const metrics=[['Reservasi terkonfirmasi',rows.filter(r=>r.status==='CONFIRMED').length],['Kunjungan',rows.filter(r=>r.ticket).length],
+      ['Sedang menunggu',rows.filter(r=>r.visit_status==='WAITING').length],['Sesi selesai',rows.filter(r=>r.visit_status==='DONE').length],['Lewat satu menit dari jadwal',late]];
+    return '<div class="ops-metrics">'+metrics.map(([label,count])=>`<div><strong>${count}</strong><span>${label}</span></div>`).join('')+'</div>'+
+      '<h2>Aktivitas periode ini</h2>'+cards(rows);
+  }
+  function settingsPanel() {
+    const cfg=response.draft?.version===response.settings.version ? response.draft : response.settings;
+    const checks=(checked)=>checked?' checked':'';
+    const number=(name,value,min=0,max=24)=>`<input type="number" name="${name}" value="${value}" min="${min}" max="${max}" required>`;
+    const text=(name,value)=>`<input name="${name}" value="${e(value)}" required minlength="2" maxlength="80">`;
+    return `<p>Versi aktif ${response.settings.version}${response.draft?' · Draf tersimpan':''}</p>
+      <form id="settings">
+      <details class="ops-panel" open><summary>Jam salon dan aturan penerimaan</summary><div class="ops-fields">
+      ${Object.entries(rulesLabels).map(([key,label])=>`<label>${label}${number(key,cfg.rules[key],0,key==='buffer'?120:['early','late'].includes(key)?240:24)}</label>`).join('')}</div></details>
+      <details class="ops-panel"><summary>Katalog layanan</summary>
+      ${cfg.services.map(s=>`<fieldset data-service="${e(s.id)}"><legend>${e(s.name)}</legend><div class="ops-fields">
+        <label>Nama${text('name',s.name)}</label><label>Harga (Rp)${number('price',s.price,0,100000000)}</label>
+        <label>Durasi (menit)${number('duration',s.duration,15,480)}</label>
+        <label class="ops-check"><input type="checkbox" name="active"${checks(s.active)}>Aktif</label>
+      </div></fieldset>`).join('')}</details>
+      <details class="ops-panel"><summary>Capster, kompetensi dan jadwal</summary>
+      ${cfg.capsters.map(c=>`<fieldset data-capster="${e(c.id)}"><legend>${e(c.name)}</legend>
+        <div class="ops-fields"><label>Nama${text('name',c.name)}</label><label>Jam mulai${number('start',c.start,0,23)}</label>
+        <label>Jam selesai${number('end',c.end,1,24)}</label><label>Hari libur<select name="off">${['Tanpa hari libur','Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'].map((d,i)=>option(i-1,d,i-1===c.off)).join('')}</select></label>
+        <label class="ops-check"><input type="checkbox" name="active"${checks(c.active)}>Aktif</label></div>
+        <details><summary>Kompetensi</summary><div class="ops-fields">${cfg.services.map(s=>`<label class="ops-check"><input type="checkbox" name="skills" value="${e(s.id)}"${checks(c.skills.includes(s.id))}>${e(s.name)}</label>`).join('')}</div></details>
+      </fieldset>`).join('')}</details>
+      <div class="ops-actions">${button('Simpan draf','draft','submit')}
+      ${response.draft?button('Periksa konflik','validate')+button('Terapkan pengaturan','publish'):''}</div>${formAlert}
+      </form>`;
+  }
+  function render(notice='') {
+    const rows=response.rows.filter(r=>!filter || (r.visit_status||r.status)===filter);
+    const visits=rows.filter(r=>r.ticket);
+    app.innerHTML=`<div class="ops-top"><div><p class="step">${e(names[role])}</p><h1>${e(heading())}</h1></div>
+      ${role==='staff'?'<a class="action" href="/reservasi">Buat reservasi</a>':''}
+      ${role==='capster'?button(response.ready?'Tandai belum siap':'Tandai siap','ready'):''}</div>
+      ${role==='manager'?'<div class="ops-tabs">'+button('Ringkasan','overview')+button('Pengaturan','settings')+'</div>':''}
+      <p id="ops-message" role="status">${e(notice)}</p>
+      ${section==='settings'?settingsPanel():controls()}
+      ${role==='staff'?'<div id="antrean">'+walkInPanel()+'<h2>Antrean harian</h2>'+cards(visits)+'</div><h2>Daftar reservasi</h2>'+cards(rows.filter(r=>r.channel!=='WALK_IN')):''}
+      ${role==='capster'?'<p>'+e(capsterName(response.mine))+' · '+(response.ready?'Siap menerima pelanggan':'Belum siap')+' · Estimasi dapat berubah</p>'+cards(rows):''}
+      ${role==='manager' && section!=='settings'?overview():''}`;
+    if (section!=='settings') app.querySelector('#ops-date').elements.day.max='9999-12-31';
+    const walk=app.querySelector('#walk-in');
+    if (walk) {
+      const {service,capster,start}=walk.elements;
+      let request=0;
+      const note=app.querySelector('#walk-status');
+      service.onchange=()=>{
+        capster.innerHTML=option('','Pilih capster')+activeChoices(response.settings.capsters.filter(c=>c.skills.includes(service.value)));
+        capster.onchange();
+      };
+      capster.onchange=async ()=>{
+        const ticket=++request;
+        start.innerHTML=option('','Pilih jam');
+        start.disabled=true;
+        if (!service.value || !capster.value) { note.textContent=''; return; }
+        note.textContent='Mencari jam tersedia…';
+        try {
+          const {slots}=await api('/slots?'+new URLSearchParams({day:currentDay,capster:capster.value,service:service.value}));
+          if (ticket!==request) return;
+          start.innerHTML+=slots.map(s=>option(s.start,formatTime(s.start))).join('');
+          start.disabled=!slots.length;
+          note.textContent=slots.length ? 'Pilih jam untuk membuat tiket.' : 'Tidak ada slot yang cukup. Pilih capster lain atau buat reservasi untuk tanggal lain.';
+        } catch(error) { if (ticket===request) note.textContent=error.message; }
+      };
+    }
+  }
+  async function load(notice) {
+    const request=++generation;
+    const data=await api('/ops/board?'+new URLSearchParams({day,to:role==='manager'?to:day}));
+    if (request!==generation) return;
+    response=data;
+    render(notice);
+  }
+  function report(error,target) {
+    if (error.status===401) return location.assign('/login');
+    target.textContent=error.status ? error.message : 'Tidak dapat memuat perubahan. Silakan coba lagi.';
+  }
+  app.addEventListener('click',async event=>{
+    const control=event.target.closest('button[data-action]');
+    if (!control || control.type==='submit') return;
+    const action=control.dataset.action;
+    if (action==='overview' || action==='settings') { section=action; const hash=action==='settings'?'#pengaturan':''; if(location.hash!==hash) location.hash=hash; else render(); return; }
+    const target=app.querySelector('#ops-message');
+    control.disabled=true;
+    try {
+      const data=action==='ready'?{ready:!response.ready}:{id:control.dataset.id};
+      const result=await api('/ops/'+action,data);
+      if (result.conflicts?.length) {
+        target.textContent='Pengaturan bentrok dengan '+result.conflicts.map(r=>r.code+' ('+r.day+')').join(', ')+'.';
+        return;
+      }
+      const notices={validate:'Tidak ada konflik pada draf.',publish:'Pengaturan baru diterapkan.',ready:'Kesiapan diperbarui.',start:'Sesi dimulai.',finish:'Sesi selesai.'};
+      await load(action==='check-in'?'Check-in berhasil. Nomor antrean '+result.ticket+'.':notices[action]);
+    } catch(error) { report(error,target); }
+    finally { control.disabled=false; }
+  });
+  app.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const form=event.target;
+    const target=form.querySelector('.message');
+    const control=event.submitter;
+    const data=formData(form);
+    if (control) control.disabled=true;
+    try {
+      if (form.id==='ops-date') {
+        const previous={day,to,filter};
+        day=data.day; to=data.to||day; filter=data.status||'';
+        try { await load(); } catch(error) { ({day,to,filter}=previous); throw error; }
+      } else if (form.id==='walk-in') {
+        const result=await api('/ops/walk-in',{...data,start:Number(data.start),requestKey:walkKey});
+        walkKey=crypto.randomUUID();
+        day=currentDay; filter='';
+        await load('Walk-in diterima. Nomor antrean '+result.ticket+'.');
+      } else if (form.id==='settings') {
+        const rows=(attribute,transform)=>[...form.querySelectorAll('fieldset[data-'+attribute+']')].map(fieldset=>{
+          const values=Object.fromEntries([...fieldset.querySelectorAll('input,select')].map(input=>[input.name,input.type==='checkbox'?input.checked:input.value]));
+          return transform({...values,id:fieldset.dataset[attribute]},fieldset);
+        });
+        const services=rows('service',s=>({...s,price:Number(s.price),duration:Number(s.duration)}));
+        const capsters=rows('capster',(c,f)=>({...c,start:Number(c.start),end:Number(c.end),off:Number(c.off),
+          skills:[...f.querySelectorAll('[name="skills"]:checked')].map(i=>i.value)}));
+        const rules=Object.fromEntries(Object.keys(rulesLabels).map(k=>[k,Number(data[k])]));
+        await api('/ops/draft',{version:response.settings.version,services,capsters,rules});
+        await load('Draf tersimpan. Periksa konflik sebelum menerapkannya.');
+      } else {
+        const action=form.dataset.form;
+        await api('/ops/'+action,{...data,id:form.dataset.id,minutes:Number(data.minutes),approved:data.approved==='on'});
+        await load(action==='adjust'?'Penyesuaian diterapkan.':'Estimasi diperbarui.');
+      }
+    } catch(error) { report(error,target); }
+    finally { if(control) control.disabled=false; }
+  });
+  await load();
+  if (location.hash==='#antrean') document.querySelector('#antrean')?.scrollIntoView();
+  addEventListener('hashchange',()=>{ if(role==='manager') {section=location.hash==='#pengaturan'?'settings':'overview'; render();} else if(location.hash==='#antrean') document.querySelector('#antrean')?.scrollIntoView(); });
+}
