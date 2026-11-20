@@ -4,10 +4,10 @@ BAB VI memfokuskan prototipe pada konfirmasi reservasi. Pengembangan ini menamba
 
 ## Menyiapkan akun
 
-Siapkan variabel di PowerShell sebelum membuka server. Gunakan email demo berbeda untuk setiap peran dan kata sandi 12–128 karakter. Siapkan hanya pasangan variabel untuk akun yang ingin dibuat.
+Untuk **SQLite lokal**, siapkan variabel di PowerShell sebelum membuka server. Gunakan email demo berbeda untuk setiap peran dan kata sandi 12–128 karakter. Siapkan hanya pasangan variabel untuk akun yang ingin dibuat. Jika `DATABASE_URL` diatur, server memakai PostgreSQL dan akun tim dibuat dengan perintah Neon di bawah, bukan dengan variabel SQLite ini.
 
 ```powershell
-Set-Location -LiteralPath 'D:\LaSTI-ShagaSalon'
+Set-Location -LiteralPath 'D:\LaSTI-ShagaShalon-repo\prototype'
 $env:SHAGA_STAFF_EMAIL = 'resepsionis@example.test'
 $env:SHAGA_STAFF_PASSWORD = Read-Host 'Kata sandi demo resepsionis' -MaskInput
 $env:SHAGA_CAPSTER_EMAIL = 'capster-a@example.test'
@@ -19,6 +19,18 @@ npm run serve -- -p 4320 --no-ui
 ```
 
 Akun dibuat sekali. Gunakan ID `a`, `b`, atau `c` dengan email yang berbeda untuk tiap capster. Saat akun sudah terbentuk, jalankan ulang tanpa variabel pembuatan akun. Akun pelanggan dibuat lewat **Daftar**. Seluruh peran masuk dari halaman yang sama.
+
+Untuk **PostgreSQL/Neon**, atur `DATABASE_URL` untuk database target yang skemanya sudah disiapkan. Jalankan perintah berikut untuk satu akun; ulangi dengan email dan peran lain sesuai kebutuhan. Peran yang didukung adalah `staff`, `capster`, dan `manager`. ID capster diperlukan hanya untuk peran capster. Akun atau pemetaan capster yang sudah ada tidak akan ditimpa.
+
+```powershell
+$env:SHAGA_CREATE_TEAM = 'yes'
+$env:SHAGA_TEAM_EMAIL = 'manajer@example.test'
+$env:SHAGA_TEAM_ROLE = 'manager'
+$env:SHAGA_TEAM_PASSWORD = Read-Host 'Kata sandi akun tim' -MaskInput
+# Untuk capster: $env:SHAGA_TEAM_ROLE = 'capster'; $env:SHAGA_CAPSTER_ID = 'a'
+npm run db:create:team
+Remove-Item Env:SHAGA_CREATE_TEAM, Env:SHAGA_TEAM_PASSWORD
+```
 
 | Peran | Halaman | Yang bisa dicoba |
 | --- | --- | --- |
@@ -37,4 +49,4 @@ Akun dibuat sekali. Gunakan ID `a`, `b`, atau `c` dengan email yang berbeda untu
 
 Harga dan durasi lama disimpan untuk reservasi yang sudah ada. Reservasi yang dibuat resepsionis atas nama tamu dapat dilihat tim salon. Reservasi mandiri terikat ke akun pelanggan yang membuatnya. Jadwal, katalog dan data capster awal berasal dari data contoh. Manajemen dapat mengubah entri contoh, menonaktifkan layanan/capster, serta mengatur satu shift dan satu hari libur mingguan per capster. Alokasi terkonfirmasi dipertahankan hingga interval semula berakhir. Penjadwalan saat sesi berjalan juga mempertimbangkan perkiraan selesai dan jeda.
 
-Penyimpanan lokal tetap memakai SQLite dalam `LOCALAPPDATA\ShagaSalonPrototype`. Tampilan ini ditujukan untuk demo localhost. Notifikasi reservasi dicatat sebagai simulasi. Pembayaran, tanggapan pelanggan dan ringkasannya dicatat sebagai rencana lanjutan. Feedback nantinya bersifat sukarela dan hanya untuk kunjungan selesai milik akun pelanggan.
+Tanpa `DATABASE_URL`, data lokal memakai SQLite dalam `LOCALAPPDATA\ShagaSalonPrototype`; dengan `DATABASE_URL`, data memakai database PostgreSQL yang ditunjuk. Notifikasi reservasi dicatat sebagai simulasi. Pembayaran, tanggapan pelanggan dan ringkasannya masih rencana lanjutan. Feedback nantinya bersifat sukarela dan hanya untuk kunjungan selesai milik akun pelanggan.
