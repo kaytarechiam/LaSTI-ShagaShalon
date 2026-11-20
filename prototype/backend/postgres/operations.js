@@ -121,7 +121,9 @@ export function createPostgresOperations(db) {
     if (!validDay(day) || !validDay(to) || to<day || Date.parse(to)-Date.parse(day)>31*86400000) fail(400,'Pilih rentang tanggal hingga 31 hari.');
     const settings=await getConfig(db), mine=account.role==='capster' ? (await actorCapster(db,account))||'' : null;
     const result=await db.query(query+' WHERE r.day BETWEEN $1 AND $2'+(mine===null?'':' AND r.capster=$3')+' ORDER BY r.start',mine===null?[day,to]:[day,to,mine]);
-    const rows=await Promise.all(result.rows.map(r=>withItems(db,r))), pending=new Map(), now=Date.now();
+    const rows=[];
+    for (const entry of result.rows) rows.push(await withItems(db,entry));
+    const pending=new Map(), now=Date.now();
     for (const r of rows.filter(r=>r.visit_status==='ACTIVE' && r.day===today())) pending.set(r.capster,Math.max(now,r.estimate)+settings.rules.buffer*60000);
     for (const r of rows.filter(r=>r.visit_status==='WAITING')) {
       r.eta=Math.max(r.start,pending.get(r.capster)||r.start,r.day===today()?now:0);

@@ -1,9 +1,10 @@
 {
   "version": 2,
+  "git": { "deploymentEnabled": { "codex/neon-vercel-preview-20261120": false } },
   "routes": [
     { "src": "^/(?:login|daftar|reservasi|akun|beranda|profil|resepsionis|capster|manajemen|reservation-ui/.*)$", "headers": { "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'" }, "continue": true },
-    { "src": "^/backend(?:/.*)?$", "status": 404 },
-    { "src": "^/(?:package(?:-lock)?\\.json|serve\\.js|NEON-VERCEL\\.md|RESERVASI\\.md|OPERASIONAL\\.md|vercel\\.json)$", "status": 404 },
+    { "src": "^/backend(?:/.*)?$", "dest": "/404.html", "status": 404 },
+    { "src": "^/(?:package(?:-lock)?\\.json|serve\\.js|NEON-VERCEL\\.md|RESERVASI\\.md|OPERASIONAL\\.md|vercel\\.json)$", "dest": "/404.html", "status": 404 },
     { "src": "^/api/(.*)$", "dest": "/api/index?__route=$1" },
     { "src": "^/reservation-ui/catalog\\.js$", "dest": "/backend/catalog.js" },
     { "src": "^/(?:visit(?:\\.html)?|subpages/visit\\.html)$", "status": 302, "headers": { "Location": "/reservasi" } },

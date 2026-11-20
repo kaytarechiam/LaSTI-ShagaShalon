@@ -57,7 +57,8 @@ try {
     assert.equal(a.status,201,JSON.stringify(a.body)); assert.equal(b.status,201,JSON.stringify(b.body));
     assert.equal((await first(`/api/reservations/${a.body.id}/confirm`,{quote:a.body.quote})).status,200);
     assert.equal((await second(`/api/reservations/${b.body.id}/confirm`,{quote:b.body.quote})).status,409);
-    assert.equal((await staff('/api/ops/board?day='+chosen.day)).body.rows.length,2);
+    const staffBoard=(await staff('/api/ops/board?day='+chosen.day)).body.rows;
+    assert.ok(staffBoard.some(row=>row.id===a.body.id) && staffBoard.some(row=>row.id===b.body.id));
     // Exercise management and capster routes with the same test account inside the rollback.
     await tx.query("UPDATE accounts SET role='manager' WHERE email=$1",[`staff-${suffix}@example.test`]);
     const board=(await staff('/api/ops/board')).body;
@@ -65,13 +66,25 @@ try {
     assert.equal((await staff('/api/ops/validate',{})).body.published,false);
     assert.equal((await staff('/api/ops/publish',{})).body.published,true);
     const staffAccount=await tx.query('SELECT id FROM accounts WHERE email=$1',[`staff-${suffix}@example.test`]);
+    await tx.query("UPDATE accounts SET role='staff' WHERE id=$1",[staffAccount.rows[0].id]);
+    const visitId=randomBytes(16).toString('hex'), now=Date.now();
+    await tx.query(`INSERT INTO reservations(id,account,service,capster,day,start,"end",name,phone,status,code)
+      VALUES($1,$2,$3,$4,$5,$6,$7,'Demo','081234567890','CONFIRMED',$8)`,
+      [visitId,staffAccount.rows[0].id,chosen.service,chosen.capster,catalog.today,now-1000,now+3600000,'TEST-'+suffix]);
+    await tx.query('INSERT INTO allocations(reservation,capster,start,"end") VALUES($1,$2,$3,$4)',[visitId,chosen.capster,now-1000,now+3600000]);
+    await tx.query('INSERT INTO booking_terms(reservation,price,duration) VALUES($1,45000,45)',[visitId]);
+    await tx.query("INSERT INTO reservation_items(reservation,position,service,name,price,duration) VALUES($1,0,$2,'Demo',45000,45)",[visitId,chosen.service]);
+    assert.equal((await staff('/api/ops/check-in',{id:visitId})).body.visit_status,'WAITING');
     await tx.query("UPDATE accounts SET role='capster' WHERE id=$1",[staffAccount.rows[0].id]);
     await tx.query('INSERT INTO capster_accounts(account,capster) VALUES($1,$2)',[staffAccount.rows[0].id,chosen.capster]);
     assert.equal((await staff('/api/ops/ready',{ready:true})).status,200);
     assert.equal((await staff('/api/ops/board?day='+chosen.day)).body.mine,chosen.capster);
+    assert.equal((await staff('/api/ops/start',{id:visitId})).body.visit_status,'ACTIVE');
+    assert.equal((await staff('/api/ops/estimate',{id:visitId,minutes:30})).status,200);
+    assert.equal((await staff('/api/ops/finish',{id:visitId})).body.visit_status,'DONE');
     throw intentionalRollback;
   });
 } catch (error) {
   if (error!==intentionalRollback) throw error;
-  console.log('PostgreSQL account, reservation, conflict, and staff board checks passed; rolled back.');
+  console.log('PostgreSQL accounts, booking conflict, staff, management, and capster session checks passed; rolled back.');
 } finally { await pool.close(); }
