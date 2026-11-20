@@ -10,6 +10,8 @@ if (!process.env.DATABASE_URL) {
   try {
     const schema = await readFile(new URL('./001-schema.sql', import.meta.url), 'utf8');
     await db.query(schema);
+    const settlement = await readFile(new URL('./003-settlement.sql', import.meta.url), 'utf8');
+    await db.query(settlement);
     console.log('Development schema created. Set DATABASE_URL when starting the application to use PostgreSQL.');
   } catch (error) {
     // Connection errors may contain credentials; report only a PostgreSQL error code.

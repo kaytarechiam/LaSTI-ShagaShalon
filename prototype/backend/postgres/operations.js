@@ -177,5 +177,12 @@ export function createPostgresOperations(db) {
     if (role==='manager' && ['/api/ops/validate','/api/ops/publish'].includes(path)) return draftOutcome(account,path.endsWith('/publish'));
     fail(403,'Peranmu tidak memiliki akses ke tindakan ini.');
   }
-  return {route};
+  async function customerQueue(account,id) {
+    const owned=await one(db,'SELECT day FROM reservations WHERE id=$1 AND account=$2',[id,account.id]);
+    if (!owned) fail(404,'Reservasi tidak ditemukan.');
+    const result=await board(account,new URLSearchParams({day:owned.day}));
+    const r=result.rows.find(entry=>entry.id===id);
+    return {ticket:r?.ticket||null,status:r?.visit_status||null,eta:r?.eta||null,estimate:r?.estimate||null};
+  }
+  return {route,customerQueue};
 }

@@ -24,7 +24,7 @@ export function showBooking({account,catalog,params,screen,title,escape:e,price,
       <p id="slot-status" role="status"></p>
       <div class="booking-section-heading"><span>03</span><div><h2>Data pelanggan</h2><p>Periksa informasi yang akan digunakan saat kunjungan.</p></div></div>
       <label>Nama pelanggan<input name="name" value="${e(account.role==='staff'?'':account.name)}" required minlength="2" maxlength="100" autocomplete="name"></label>
-      <label>Nomor telepon<input name="phone" value="${e(account.phone)}" type="tel" required maxlength="22" autocomplete="tel"></label>
+      <label>Nomor telepon<input name="phone" value="${e(account.role==='staff'?'':account.phone)}" type="tel" required maxlength="22" autocomplete="tel"></label>
       <div class="booking-section-heading"><span>04</span><div><h2>Ringkasan pilihan</h2><p>Jadwal diamankan setelah konfirmasi berhasil.</p></div></div>
       <div id="service-summary" class="service-summary" aria-live="polite"></div>
       ${message}

@@ -48,5 +48,6 @@ Akun dapat dipakai ketika aplikasi berjalan dengan `DATABASE_URL` yang menunjuk 
 ## Pekerjaan sebelum deployment
 
 - Terapkan skema dan migrasi pada database target sebelum deployment; untuk database dengan skema awal yang sudah ada, `002-auth-attempts.sql` menambahkan tabel pembatasan login.
+- Terapkan `003-settlement.sql` pada database yang sudah ada sebelum menjalankan kode tagihan, pembayaran, feedback, dan laporan. Migrasi ini hanya menambahkan tabel; jangan menjalankan ulang skema awal pada database yang berisi data. Inisialisasi database pengembangan baru sudah mencakup migrasi tersebut.
 - Skema ini tidak mengimpor data SQLite. Jika data lama diperlukan, siapkan dan uji prosedur pemindahan terpisah.
 - Uji seluruh alur terhadap database Neon pengembangan dan deployment pratinjau sebelum memakai database produksi. Simpan `DATABASE_URL` sebagai environment variable rahasia di Vercel, bukan di kode frontend.

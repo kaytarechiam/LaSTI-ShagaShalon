@@ -124,6 +124,40 @@ function review(row,catalog,account) {
       '<form>'+message+'<button type="submit">Konfirmasi reservasi</button></form><a href="'+escape(reselect)+'">Kembali memilih jam</a>'));
   if (!confirmed) formAction(app.querySelector('form'),async () => review(await api('/reservations/'+row.id+'/confirm',{quote:row.quote}),catalog,account),
     {onError(error) { if (error.status === 409) app.querySelector('form button').hidden = true; }});
+  if (confirmed && account.role==='customer') void customerVisit(row);
+}
+
+async function customerVisit(row) {
+  const section=document.createElement('section');
+  section.className='review-card'; section.innerHTML='<h2>Kunjungan dan antrean</h2><p data-queue role="status">Memuat status kunjungan…</p><p data-invoice></p><div data-settlement></div>';
+  app.append(section);
+  let pending=false, timer, lastUpdated=null;
+  async function refresh() {
+    if (pending || document.hidden || !section.isConnected) return;
+    pending=true;
+    try {
+      const q=await api('/queue?'+new URLSearchParams({id:row.id}));
+      if (!section.isConnected) return;
+      lastUpdated=Date.now();
+      const state=({WAITING:'Menunggu layanan',ACTIVE:'Sedang dilayani',DONE:'Selesai'})[q.status]||'Belum check-in';
+      section.querySelector('[data-queue]').textContent=state+(q.ticket?' · Antrean '+q.ticket:'')+(q.eta?' · Perkiraan mulai '+time.format(q.eta)+' WIB':'')+(q.estimate?' · Perkiraan selesai '+time.format(q.estimate)+' WIB':'')+' · Diperbarui '+time.format(lastUpdated)+' WIB. Estimasi dapat berubah.';
+      if (q.status==='DONE') {
+        const result=await api('/settlement/detail?'+new URLSearchParams({id:row.id}));
+        section.querySelector('[data-invoice]').textContent=result.invoice?'Tagihan: '+price.format(result.invoice.total)+' · '+(result.invoice.paid_at?'Lunas ('+result.invoice.method+')':'Belum lunas'):'Tagihan belum dibuat.';
+        if (section.dataset.loaded) return;
+        const box=section.querySelector('[data-settlement]');
+        box.innerHTML=(result.feedback?'<p>Terima kasih, feedback kamu sudah tercatat ('+escape(result.feedback.rating)+'/5).</p>':
+          '<form data-feedback><h3>Feedback sukarela</h3><label>Rating<select name="rating" required><option value="">Pilih rating</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label><label>Komentar (opsional)<textarea name="comment" maxlength="1000"></textarea></label><p>Kamu dapat melewati feedback ini.</p>'+message+'<button type="submit">Kirim feedback</button></form>');
+        const form=box.querySelector('form');
+        if (form) formAction(form,async data=>{await api('/settlement/feedback',{id:row.id,rating:Number(data.rating),comment:data.comment});box.innerHTML='<p>Terima kasih, feedback kamu sudah tercatat.</p>';});
+        section.dataset.loaded='yes';
+      }
+    } catch { if (section.isConnected) section.querySelector('[data-queue]').textContent='Gagal memperbarui antrean. '+(lastUpdated?'Terakhir diperbarui '+time.format(lastUpdated)+' WIB. ':'')+'Periksa koneksi.'; }
+    finally { pending=false; }
+  }
+  await refresh();
+  if (section.isConnected) timer=setInterval(refresh,20000);
+  addEventListener('pagehide',()=>clearInterval(timer),{once:true});
 }
 
 async function accountScreen(account) {

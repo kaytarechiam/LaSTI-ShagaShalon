@@ -2,6 +2,7 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypt
 import { today } from '../catalog.js';
 import { createAccountStore } from './accounts.js';
 import { initializeConfig, getConfig, serviceBundle, availableSlots, getItems, writeTerms } from './scheduling.js';
+import { createSettlement } from './settlement.js';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const ttl = 8 * 3600;
@@ -60,6 +61,7 @@ async function owned(db, id, account) {
 export async function createPostgresReservationApi(db, { operations } = {}) {
   await initializeConfig(db);
   const accounts = createAccountStore(db);
+  const settlement = createSettlement(db);
   function token(req) { return req.headers.cookie?.match(/(?:^|;\s*)shaga_session=([a-f0-9]{64})(?:;|$)/)?.[1]; }
   function setCookie(req, res, value, age) {
     const secure = req.socket?.encrypted || (process.env.VERCEL && req.headers['x-forwarded-proto'] === 'https');
@@ -139,6 +141,10 @@ export async function createPostgresReservationApi(db, { operations } = {}) {
       if (!post && route === '/api/public-catalog') return send(200, { services: (await getConfig(db)).services });
       if (!account) throw new ApiError(401, 'Masuk untuk melanjutkan reservasi.');
       if (post && route === '/api/profile') return send(200, { account: await accounts.updateProfile(account.id, ...Object.values(contact(await body(req)))) });
+      if (route.startsWith('/api/settlement/'))
+        return send(200, await settlement.route(account,route,url.searchParams,post ? await body(req) : null));
+      if (!post && route === '/api/queue' && account.role === 'customer' && operations)
+        return send(200, await operations.customerQueue(account,url.searchParams.get('id')));
       if (route.startsWith('/api/ops/')) {
         if (!operations) throw new ApiError(503, 'Operasional belum tersedia.');
         if (!['staff', 'capster', 'manager'].includes(account.role)) throw new ApiError(403, 'Halaman khusus tim salon.');

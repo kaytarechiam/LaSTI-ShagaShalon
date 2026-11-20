@@ -7,7 +7,7 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
   document.title = names[account.role]+' · Shaga Salon';
   const currentDay = new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Jakarta'}).format(new Date());
   let day=currentDay, to=currentDay, filter='', response, walkKey=crypto.randomUUID();
-  let generation=0;
+  let generation=0, dirty=false, busy=false, lastUpdated=null;
   const role=account.role;
   let section=role==='manager'?(location.hash==='#pengaturan'?'settings':'overview'):'desk';
   const option=(value,label,selected=false)=>`<option value="${e(value)}"${selected?' selected':''}>${e(label)}</option>`;
@@ -29,6 +29,7 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
       ${button('Tampilkan','filter','submit')}${formAlert}</form>`;
   }
   function staffActions(r) {
+    if (role==='staff' && r.visit_status==='DONE') return `<details class="ops-panel" data-settlement="${e(r.id)}"><summary>Tagihan dan pembayaran</summary><div>Memuat saat dibuka.</div></details>`;
     if (role!=='staff' || r.visit_status || r.status!=='CONFIRMED' || r.day!==currentDay) return '';
     return `<button type="button" data-action="check-in" data-id="${e(r.id)}">Check-in</button>`;
   }
@@ -84,7 +85,7 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
     const late=rows.filter(r=>(r.eta||r.started||0)>r.start+60000).length;
     const metrics=[['Reservasi terkonfirmasi',rows.filter(r=>r.status==='CONFIRMED').length],['Kunjungan',rows.filter(r=>r.ticket).length],
       ['Sedang menunggu',rows.filter(r=>r.visit_status==='WAITING').length],['Sesi selesai',rows.filter(r=>r.visit_status==='DONE').length],['Lewat satu menit dari jadwal',late]];
-    return '<div class="ops-metrics">'+metrics.map(([label,count])=>`<div><strong>${count}</strong><span>${label}</span></div>`).join('')+'</div>'+
+    return '<div id="management-report"></div><div class="ops-metrics">'+metrics.map(([label,count])=>`<div><strong>${count}</strong><span>${label}</span></div>`).join('')+'</div>'+
       '<h2>Aktivitas periode ini</h2>'+cards(rows);
   }
   function settingsPanel() {
@@ -114,6 +115,7 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
       </form>`;
   }
   function render(notice='') {
+    dirty=false;
     const rows=response.rows.filter(r=>!filter || (r.visit_status||r.status)===filter);
     const visits=rows.filter(r=>r.ticket);
     app.innerHTML=`<div class="ops-top"><div><p class="step">${e(names[role])}</p><h1>${e(heading())}</h1></div>
@@ -121,6 +123,7 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
       ${role==='capster'?button(response.ready?'Tandai belum siap':'Tandai siap','ready'):''}</div>
       ${role==='manager'?'<div class="ops-tabs">'+button('Ringkasan','overview')+button('Pengaturan','settings')+'</div>':''}
       <p id="ops-message" role="status">${e(notice)}</p>
+      <p id="refresh-status" role="status"></p>
       ${section==='settings'?settingsPanel():controls()}
       ${role==='staff'?'<div id="antrean">'+walkInPanel()+'<h2>Antrean harian</h2>'+cards(visits)+'</div><h2>Daftar reservasi</h2>'+cards(rows.filter(r=>r.channel!=='WALK_IN')):''}
       ${role==='capster'?'<p>'+e(capsterName(response.mine))+' · '+(response.ready?'Siap menerima pelanggan':'Belum siap')+' · Estimasi dapat berubah</p>'+cards(rows):''}
@@ -151,13 +154,40 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
       };
     }
   }
-  async function load(notice) {
+  async function load(notice, automatic=false) {
     const request=++generation;
     const data=await api('/ops/board?'+new URLSearchParams({day,to:role==='manager'?to:day}));
-    if (request!==generation) return;
+    if (request!==generation || (automatic && (busy || dirty || app.querySelector('details[open]')))) return;
     response=data;
     render(notice);
+    lastUpdated=Date.now();
+    app.querySelector('#refresh-status').textContent='Diperbarui '+formatTime(lastUpdated)+' · Estimasi dapat berubah.';
+    if (role==='manager' && section!=='settings') await showReport();
   }
+  async function showReport() {
+    const target=app.querySelector('#management-report'); if (!target) return;
+    try {
+      const r=await api('/settlement/report?'+new URLSearchParams({from:day,to}));
+      if (!target.isConnected) return;
+      target.innerHTML='<h2>Laporan periode</h2><p>Reservasi dan kunjungan berdasarkan tanggal kunjungan; pembayaran dan feedback berdasarkan waktu pencatatan (WIB).</p>'+
+        '<div class="ops-metrics">'+[['Reservasi terkonfirmasi',r.counts.reservations],['Kunjungan',r.counts.visits],['Walk-in',r.counts.walkins],['Selesai',r.counts.finished],['Pembayaran lunas',r.payments.count],['Total lunas',price.format(r.payments.total)],['Feedback',r.feedback.count],['Rata-rata rating',r.feedback.average?.toFixed(1)||'—']].map(([label,value])=>'<div><strong>'+e(value)+'</strong><span>'+e(label)+'</span></div>').join('')+'</div>'+
+        '<p>Metode pembayaran: '+e(r.methods.map(x=>x.method+' '+price.format(x.total)).join(' · ')||'Belum ada')+'</p><p>Layanan selesai terbanyak: '+e(r.popular.map(x=>x.name+' ('+x.count+')').join(', ')||'Belum ada')+'</p>'+
+        '<h3>Feedback terbaru</h3>'+r.comments.map(f=>'<article class="ops-panel"><strong>'+e(f.rating)+'/5</strong><p>'+e(f.comment||'Tanpa komentar')+'</p>'+((f.followups||[]).map(x=>'<p>Tindak lanjut: '+e(x.note)+'</p>').join(''))+'<form data-followup="'+e(f.reservation)+'"><label>Tindak lanjut<textarea name="note" maxlength="1000" required></textarea></label><button type="submit">Simpan tindak lanjut</button>'+formAlert+'</form></article>').join('');
+    } catch(error) { if (target.isConnected) target.textContent='Laporan tidak dapat dimuat: '+(error.message||'periksa koneksi'); }
+  }
+  async function settlementPanel(panel) {
+    const box=panel.querySelector('div'), id=panel.dataset.settlement;
+    const {invoice}=await api('/settlement/detail?'+new URLSearchParams({id}));
+    box.innerHTML=invoice ? '<p>Total tagihan: <strong>'+e(price.format(invoice.total))+'</strong> · '+(invoice.paid_at?'Lunas ('+e(invoice.method)+')':'Belum lunas')+'</p>'+
+      (invoice.adjustments||[]).map(a=>'<p>Koreksi oleh '+e(a.actor)+': '+e(price.format(a.old_total))+' → '+e(price.format(a.new_total))+' · '+e(a.reason)+'</p>').join('')+
+      (invoice.paid_at?'':`<form data-settle="adjust"><label>Total koreksi (Rp)<input name="total" type="number" min="0" max="1000000000" required></label><label>Alasan koreksi<input name="reason" maxlength="500" required></label><button type="submit">Simpan koreksi</button>${formAlert}</form>
+      <form data-settle="pay"><label>Metode<select name="method"><option value="CASH">Tunai</option><option value="TRANSFER">Transfer</option><option value="OTHER">Lainnya</option></select></label><label><input name="received" type="checkbox" required> Saya memastikan pembayaran telah diterima</label><button type="submit">Catat pembayaran</button>${formAlert}</form>`) :
+      `<p>Tagihan dibuat dari harga layanan yang tercatat saat kunjungan.</p><form data-settle="create"><button type="submit">Buat tagihan</button>${formAlert}</form>`;
+  }
+  app.addEventListener('toggle',event=>{
+    const panel=event.target;
+    if (panel.matches('details[data-settlement]') && panel.open) settlementPanel(panel).catch(error=>{panel.querySelector('div').textContent=error.message||'Tidak dapat memuat tagihan.';});
+  },true);
   function report(error,target) {
     if (error.status===401) return location.assign('/login');
     target.textContent=error.status ? error.message : 'Tidak dapat memuat perubahan. Silakan coba lagi.';
@@ -166,8 +196,9 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
     const control=event.target.closest('button[data-action]');
     if (!control || control.type==='submit') return;
     const action=control.dataset.action;
-    if (action==='overview' || action==='settings') { section=action; const hash=action==='settings'?'#pengaturan':''; if(location.hash!==hash) location.hash=hash; else render(); return; }
+    if (action==='overview' || action==='settings') { section=action; const hash=action==='settings'?'#pengaturan':''; if(location.hash!==hash) location.hash=hash; else { render(); if(action==='overview') void showReport(); } return; }
     const target=app.querySelector('#ops-message');
+    busy=true;
     control.disabled=true;
     try {
       const data=action==='ready'?{ready:!response.ready}:{id:control.dataset.id};
@@ -179,7 +210,7 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
       const notices={validate:'Tidak ada konflik pada draf.',publish:'Pengaturan baru diterapkan.',ready:'Kesiapan diperbarui.',start:'Sesi dimulai.',finish:'Sesi selesai.'};
       await load(action==='check-in'?'Check-in berhasil. Nomor antrean '+result.ticket+'.':notices[action]);
     } catch(error) { report(error,target); }
-    finally { control.disabled=false; }
+    finally { busy=false; control.disabled=false; }
   });
   app.addEventListener('submit',async event=>{
     event.preventDefault();
@@ -187,12 +218,20 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
     const target=form.querySelector('.message');
     const control=event.submitter;
     const data=formData(form);
+    busy=true;
     if (control) control.disabled=true;
     try {
       if (form.id==='ops-date') {
         const previous={day,to,filter};
         day=data.day; to=data.to||day; filter=data.status||'';
         try { await load(); } catch(error) { ({day,to,filter}=previous); throw error; }
+      } else if (form.dataset.settle) {
+        const panel=form.closest('[data-settlement]'), action=form.dataset.settle;
+        await api('/settlement/'+action,{id:panel.dataset.settlement,...data,total:Number(data.total),received:data.received==='on'});
+        await settlementPanel(panel);
+      } else if (form.dataset.followup) {
+        await api('/settlement/followup',{id:form.dataset.followup,note:data.note});
+        await showReport();
       } else if (form.id==='walk-in') {
         const result=await api('/ops/walk-in',{...data,start:Number(data.start),requestKey:walkKey});
         walkKey=crypto.randomUUID();
@@ -215,9 +254,21 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
         await load(action==='adjust'?'Penyesuaian diterapkan.':'Estimasi diperbarui.');
       }
     } catch(error) { report(error,target); }
-    finally { if(control) control.disabled=false; }
+    finally { busy=false; if(control) control.disabled=false; }
   });
+  app.addEventListener('input',event=>{ if(event.target.closest('form')) dirty=true; });
+  app.addEventListener('change',event=>{ if(event.target.closest('form')) dirty=true; });
   await load();
+  let polling=false;
+  const refresh=async()=>{
+    if (polling || busy || dirty || document.hidden || !app.isConnected || section==='settings' || app.querySelector('details[open]') || app.contains(document.activeElement) && document.activeElement.matches('input,select,textarea')) return;
+    polling=true;
+    try { await load(undefined,true); }
+    catch { const target=app.querySelector('#refresh-status'); if(target) target.textContent='Gagal memperbarui. '+(lastUpdated?'Terakhir diperbarui '+formatTime(lastUpdated)+'. ':'')+'Data mungkin sudah berubah; muat ulang halaman.'; }
+    finally { polling=false; }
+  };
+  const timer=setInterval(refresh,20000);
+  addEventListener('pagehide',()=>clearInterval(timer),{once:true});
   if (location.hash==='#antrean') document.querySelector('#antrean')?.scrollIntoView();
-  addEventListener('hashchange',()=>{ if(role==='manager') {section=location.hash==='#pengaturan'?'settings':'overview'; render();} else if(location.hash==='#antrean') document.querySelector('#antrean')?.scrollIntoView(); });
+  addEventListener('hashchange',()=>{ if(role==='manager') {section=location.hash==='#pengaturan'?'settings':'overview'; render(); if(section==='overview') void showReport();} else if(location.hash==='#antrean') document.querySelector('#antrean')?.scrollIntoView(); });
 }

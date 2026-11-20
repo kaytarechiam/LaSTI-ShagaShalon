@@ -66,11 +66,12 @@ try {
     assert.equal((await staff('/api/ops/validate',{})).body.published,false);
     assert.equal((await staff('/api/ops/publish',{})).body.published,true);
     const staffAccount=await tx.query('SELECT id FROM accounts WHERE email=$1',[`staff-${suffix}@example.test`]);
+    const customerAccount=await tx.query('SELECT id FROM accounts WHERE email=$1',[`customer-${suffix}@example.test`]);
     await tx.query("UPDATE accounts SET role='staff' WHERE id=$1",[staffAccount.rows[0].id]);
     const visitId=randomBytes(16).toString('hex'), now=Date.now(), testCapster='test-'+suffix;
     await tx.query(`INSERT INTO reservations(id,account,service,capster,day,start,"end",name,phone,status,code)
       VALUES($1,$2,$3,$4,$5,$6,$7,'Demo','081234567890','CONFIRMED',$8)`,
-      [visitId,staffAccount.rows[0].id,chosen.service,testCapster,catalog.today,now-1000,now+3600000,'TEST-'+suffix]);
+      [visitId,customerAccount.rows[0].id,chosen.service,testCapster,catalog.today,now-1000,now+3600000,'TEST-'+suffix]);
     await tx.query('INSERT INTO allocations(reservation,capster,start,"end") VALUES($1,$2,$3,$4)',[visitId,testCapster,now-1000,now+3600000]);
     await tx.query('INSERT INTO booking_terms(reservation,price,duration) VALUES($1,45000,45)',[visitId]);
     await tx.query("INSERT INTO reservation_items(reservation,position,service,name,price,duration) VALUES($1,0,$2,'Demo',45000,45)",[visitId,chosen.service]);
@@ -82,6 +83,26 @@ try {
     assert.equal((await staff('/api/ops/start',{id:visitId})).body.visit_status,'ACTIVE');
     assert.equal((await staff('/api/ops/estimate',{id:visitId,minutes:30})).status,200);
     assert.equal((await staff('/api/ops/finish',{id:visitId})).body.visit_status,'DONE');
+    await tx.query("UPDATE accounts SET role='staff' WHERE id=$1",[staffAccount.rows[0].id]);
+    assert.equal((await second('/api/settlement/detail?id='+visitId)).status,404);
+    assert.equal((await second('/api/settlement/feedback',{id:visitId,rating:5,comment:'x'})).status,404);
+    assert.equal((await first('/api/settlement/create',{id:visitId})).status,403);
+    assert.equal((await staff('/api/settlement/create',{id:visitId})).body.total,45000);
+    assert.equal((await staff('/api/settlement/adjust',{id:visitId,total:40000,reason:'Koreksi'})).body.total,40000);
+    assert.equal((await staff('/api/settlement/pay',{id:visitId,method:'CASH',received:true})).body.paid_amount,40000);
+    assert.equal((await staff('/api/settlement/pay',{id:visitId,method:'CASH',received:true})).body.paid_amount,40000);
+    assert.equal((await staff('/api/settlement/pay',{id:visitId,method:'TRANSFER',received:true})).status,409);
+    assert.equal((await staff('/api/settlement/adjust',{id:visitId,total:1,reason:'x'})).status,409);
+    assert.equal((await first('/api/settlement/detail?id='+visitId)).body.invoice.paid_amount,40000);
+    assert.equal((await first('/api/settlement/feedback',{id:visitId,rating:5,comment:'Bagus'})).status,200);
+    assert.equal((await first('/api/settlement/feedback',{id:visitId,rating:5,comment:'Bagus'})).status,409);
+    assert.equal((await first('/api/settlement/report?from='+catalog.today+'&to='+catalog.today)).status,403);
+    await tx.query("UPDATE accounts SET role='manager' WHERE id=$1",[staffAccount.rows[0].id]);
+    const report=await staff('/api/settlement/report?from='+catalog.today+'&to='+catalog.today);
+    assert.equal(report.status,200,JSON.stringify(report.body));
+    assert.ok(report.body.payments.total>=40000);
+    assert.ok(report.body.feedback.count>=1);
+    assert.equal((await staff('/api/settlement/followup',{id:visitId,note:'Terima kasih'})).status,200);
     throw intentionalRollback;
   });
 } catch (error) {

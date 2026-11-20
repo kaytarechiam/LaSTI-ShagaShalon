@@ -13,3 +13,4 @@ function run(file,env) {
 }
 test('PostgreSQL reservation and operations integration', {skip:!enabled,timeout:180000},()=>run('./postgres-api-smoke.mjs',{DATABASE_URL:url}));
 test('PostgreSQL concurrent allocation exclusion', {skip:!enabled,timeout:180000},()=>run('./postgres-concurrency.mjs',{}));
+test('PostgreSQL concurrent duplicate payments', {skip:!enabled,timeout:180000},()=>run('./postgres-payments-concurrency.mjs',{DATABASE_URL:url}));
