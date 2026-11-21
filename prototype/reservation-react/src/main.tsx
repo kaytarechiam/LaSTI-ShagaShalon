@@ -135,7 +135,7 @@ function App() {
   useEffect(()=>{const titles:Record<string,string>={'/login':'Masuk','/daftar':'Daftar','/beranda':'Beranda','/akun':'Reservasi saya','/profil':'Profil saya','/reservasi':'Reservasi'};document.title=(titles[path]||'Shaga Salon')+' · Shaga Salon';},[]);
   useEffect(()=>{api<{account:Account|null}>('/session').then(async ({account})=>{
     if(account && teamHome[account.role]) { document.body.classList.remove('m-root'); await loadLegacy(); return; }
-    if(!account && path!=='/login' && path!=='/daftar'){go('/login'+(location.search||''));return;}
+    if(!account && path!=='/login' && path!=='/daftar'){go('/login'+(location.search||(path==='/reservasi'?'?lanjut=reservasi':'')));return;}
     if(account && (path==='/login'||path==='/daftar')){go(query.size?'/reservasi'+location.search:'/beranda');return;}
     setSession(account); if(account) setCatalog(await api<Catalog>('/catalog'));
   }).catch(e=>setError(message(e)));},[]);
