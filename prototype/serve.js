@@ -180,6 +180,11 @@ async function main() {
     try { pathname = decodeURIComponent((req.url || '/').split('?')[0]); if (!pathname.startsWith('/') || pathname.includes('\0') || pathname.includes('\\')) throw new Error(); }
     catch { respond(400,'Invalid request path'); return; }
     const normalized = pathname.replace(/\/$/,'') || '/';
+    if (normalized === '/landing-original' || normalized.startsWith('/landing-original/') ||
+        normalized === '/landing-webflow/assets/misc' || normalized.startsWith('/landing-webflow/assets/misc/')) {
+      respond(404,'Not found');
+      return;
+    }
     if (booking && /^\/(visit(?:\.html)?|subpages\/visit\.html)$/.test(normalized)) {
       res.writeHead(302,{'Location':'/reservasi'+url.search,'Cache-Control':'no-store'});
       res.end();
@@ -234,7 +239,7 @@ async function main() {
           if (inApp) headers['Content-Security-Policy'] =
             "default-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
           const content = await fs.promises.readFile(real,'utf8');
-          const html = inApp || content.includes('/reservation-ui/landing.js') ? content : content.replace(/<\/body>/i,
+          const html = inApp || content.includes('data-shaga-landing') || content.includes('/reservation-ui/landing.js') ? content : content.replace(/<\/body>/i,
             '<link rel="stylesheet" href="/reservation-ui/shared-nav.css"><script type="module" src="/reservation-ui/landing.js"></script></body>');
           headers['Content-Length'] = Buffer.byteLength(html);
           res.writeHead(200,headers);

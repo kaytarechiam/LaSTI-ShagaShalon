@@ -258,6 +258,9 @@ export function createReservationApi(root, {memory = false} = {}) {
         const payload=post ? await body(req) : null;
         return send(200,operations.route(account,route,url.searchParams,payload));
       }
+      if (!post && route === '/api/settlement/report' && account.role === 'manager') {
+        throw new ApiError(501,'Laporan pembayaran dan feedback memerlukan database PostgreSQL; tidak tersedia pada demo SQLite lokal.');
+      }
       if (!['customer','staff'].includes(account.role)) throw new ApiError(403,'Gunakan dashboard sesuai peranmu.');
       const {services,capsters,rules}=operations.config();
       if (!post && route === '/api/catalog') return send(200,{services,capsters,buffer:rules.buffer,today:today()});

@@ -4,6 +4,13 @@
   font-display: swap;
   font-weight: 400;
 }
+@font-face {
+  font-family: 'Shaga Inter';
+  src: url('/assets/fonts/inter-variable.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
 .shaga-account-entry {
   position: fixed; top: 27px; right: max(16px, 3vw); z-index: 10000;
   color: #fff8f1; background: #332820; border: 1px solid #b68673;
@@ -65,6 +72,10 @@
 .booking-page button.secondary { background: transparent; color: var(--brown); }
 .booking-page button:disabled { opacity: .55; cursor: wait; }
 .booking-page :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.booking-page :is(h1,h2,h3,h4,h5,h6,p,span,small,label,button,input,select,textarea,a,strong,td,th,legend,li) {
+  font-family: 'Shaga Inter', sans-serif !important;
+}
+.booking-page .booking-content .m-auth-art .m-art-caption p { color: #fff !important; }
 .booking-page [hidden] { display: none !important; }
 .booking-content .message { color: #812b24; min-height: 1.6em; margin: 0; }
 .step { font-size: 14px; font-weight: 650; color: var(--accent) !important; }

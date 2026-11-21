@@ -5,6 +5,12 @@ Pelanggan dapat memilih layanan, capster, dan jadwal; resepsionis membantu
 reservasi serta kedatangan; capster memperbarui pelayanan; dan manajemen
 memantau operasional.
 
+Antarmuka pelanggan sedang dimigrasikan secara bertahap ke React dan
+TypeScript dengan Vite, Tailwind CSS, Radix UI, Lucide, dan Motion. Halaman
+operasional tim masih menggunakan JavaScript sebelumnya. Landing page lokal
+menggunakan adaptasi ekspor Ixolyn/Webflow, dengan navigasi dan tautan yang
+terhubung ke reservasi Shaga Salon.
+
 **Aplikasi yang sudah tersedia:** [shaga-salon.vercel.app](https://shaga-salon.vercel.app/)
 
 Situs tersebut menampilkan versi yang sudah di-deploy. Perubahan pada komputer
@@ -42,6 +48,11 @@ tekan `Ctrl+C`. Tanpa `DATABASE_URL`, server memakai SQLite untuk demo
 reservasi lama; fitur tagihan, feedback, laporan, dan antrean terbaru
 memerlukan PostgreSQL.
 
+`npm run serve` membangun antarmuka React terlebih dahulu. Untuk memeriksa
+tipe atau membangun ulang secara terpisah, jalankan `npm run typecheck`
+atau `npm run build:app` dari folder `prototype`. Hasil build dibuat
+secara lokal dan tidak disimpan dalam Git; Vercel menjalankan build saat deploy.
+
 Untuk database pengembangan baru yang masih kosong, siapkan `DATABASE_URL`
 lalu jalankan `npm run db:init:dev` sekali sebelum menjalankan server.
 Untuk database yang sudah memiliki skema sebelumnya, terapkan migrasi
@@ -72,3 +83,49 @@ Rancangan proses bisnis yang lebih luas dijelaskan dalam
 [laporan Delivery 2](https://docs.google.com/document/d/1dqlcNDuBCY4aRa1RYe-p2kPp_U5ttwUdygrirpaqWwg/edit?tab=t.siyltlcmt1c1).
 Bab VI laporan membatasi prototype awal pada konfirmasi reservasi; fitur
 operasional dan penyelesaian transaksi merupakan perluasan dari cakupan itu.
+
+Font antarmuka aplikasi menggunakan Inter Variable, mengikuti referensi UniSpot.
+Berkas font disimpan lokal dari
+[UniSpot](https://github.com/AthallaAnanda/UniSpot); lisensinya tersedia
+di [INTER-LICENSE.txt](prototype/assets/fonts/INTER-LICENSE.txt).
+
+## Landing page dan aset
+
+Halaman utama lokal memakai ekspor halaman blog Ixolyn/Webflow, termasuk
+navbar, footer, gambar, video, dan runtime interaksinya. Teks dan tautan
+disesuaikan ke konteks Shaga Salon; font antarmuka memakai Inter. Logo teks
+Shaga Salon baru digunakan pada landing dan halaman masuk. Aset pada
+[`prototype/landing-webflow/`](prototype/landing-webflow/) adalah aset template,
+bukan foto asli salon. Ketentuan lisensi template dan aset perlu diverifikasi sebelum
+publikasi.
+
+Salinan ekspor utuh tersimpan secara lokal di `prototype/landing-original/`
+sebagai pembanding. Folder tersebut dikecualikan dari Git dan ditolak oleh
+server aplikasi; tidak otomatis ikut ketika repository di-clone. Aset misc
+export yang tidak diperlukan landing juga dikecualikan dan tidak disajikan.
+Video hero memiliki kontrol bawaan template. Kartu merupakan pengantar;
+layanan aktif dan harga yang berlaku ditampilkan saat membuka reservasi.
+
+Sumber ekspor menyebutkan bahwa akun dan pemrosesan formulir server-side tidak
+ikut diekspor; login dan reservasi menggunakan backend Shaga Salon. Tombol
+reservasi menggantikan formulir newsletter template. Halaman lama di
+`prototype/subpages/` masih menggunakan desain sebelumnya dan belum dimigrasi.
+
+## Menyimpan perubahan ke GitHub
+
+Periksa seluruh perubahan terlebih dahulu, terutama file baru dan konfigurasi.
+Pastikan tidak ada `.env`, kata sandi, atau connection string yang ikut masuk.
+Di terminal PowerShell, dari root repository:
+
+```powershell
+git status
+git diff
+git add .
+git status
+git commit -m "Update Shaga Salon frontend"
+git push -u origin fitur/operasional-shaga
+```
+
+Perintah tersebut memakai branch `fitur/operasional-shaga` yang aktif saat
+dokumentasi ini ditulis. Periksa `git branch --show-current` dan sesuaikan
+nama branch sebelum push jika sudah berpindah branch.

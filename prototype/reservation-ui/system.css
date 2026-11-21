@@ -56,3 +56,14 @@
  .system-team .ops-record { grid-template-columns:1fr; }
  .system-page.keyboard-open .system-mobile { visibility:hidden; }
 }
+
+/* Palet navigasi petugas diselaraskan dengan landing baru. */
+.system-team .system-shell { background:#aa7d5c; border-color:#aa7d5c; }
+.system-team .system-brand,.system-team .system-link,.system-team .system-site { color:#fff!important; }
+.system-team .system-link:hover,.system-team .system-link.is-active { background:#ffffff29; color:#fff!important; }
+.system-team .system-secondary { border-color:#ffffff5c; }
+.system-team .system-logout { color:#fff; border-color:#ffffff90; }
+@media(max-width:800px) {
+ .system-team .system-mobile .system-link { color:#705d51!important; }
+ .system-team .system-mobile .system-link.is-active { color:#52352b!important; background:#eee1d6; }
+}
