@@ -16,6 +16,19 @@ terhubung ke reservasi Shaga Salon.
 Situs tersebut menampilkan versi yang sudah di-deploy. Perubahan pada komputer
 tidak otomatis muncul di sana sebelum di-deploy.
 
+## Akun contoh
+
+Akun berikut tersedia pada [situs demo Shaga Salon](https://shaga-salon.vercel.app/login). Semuanya menggunakan data contoh dan masuk melalui halaman yang sama.
+
+| Kelompok | Peran | Email | Kata sandi |
+| --- | --- | --- | --- |
+| Pelanggan | Pelanggan | pelanggan.demo@shaga.example | Pelanggan123! |
+| Tim salon | Resepsionis dan kasir | resepsionis.demo@shaga.example | Resepsionis123! |
+| Tim salon | Capster | capster.demo@shaga.example | Capster123! |
+| Tim salon | Manajer | manajer.demo@shaga.example | Manajer123! |
+
+Kredensial ini bersifat publik. Siapa pun yang membacanya dapat mengakses dan mengubah data sesuai hak masing-masing peran, termasuk data operasional melalui akun manajer. Gunakan hanya untuk demonstrasi dan jangan masukkan data pelanggan atau transaksi nyata.
+
 ## Fitur
 
 - Katalog layanan, pencarian ketersediaan, reservasi, dan konfirmasi jadwal.
