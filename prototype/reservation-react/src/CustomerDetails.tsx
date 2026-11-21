@@ -24,15 +24,15 @@ function Visit({id}:{id:string}) {
   const [rating,setRating]=useState(''),[comment,setComment]=useState(''),[message,setMessage]=useState(''),[sending,setSending]=useState(false);
   useEffect(()=>{
     let live=true, pending=false;
-    async function load() {
-      if(pending||document.hidden)return;pending=true;
+    async function load(initial=false) {
+      if(pending||(!initial&&document.hidden))return;pending=true;
       try {
         const q=await api<Queue>('/queue?'+new URLSearchParams({id}));
         if(!live)return;setQueue(q);setUpdated(Date.now());setFailed(false);
         if(q.status==='DONE') {const result=await api<Settlement>('/settlement/detail?'+new URLSearchParams({id}));if(live)setSettlement(result);}
       } catch {if(live)setFailed(true);} finally {pending=false;}
     }
-    void load();const timer=setInterval(load,20000);
+    void load(true);const timer=setInterval(()=>void load(),20000);
     const visible=()=>{if(!document.hidden)void load();};document.addEventListener('visibilitychange',visible);
     return()=>{live=false;clearInterval(timer);document.removeEventListener('visibilitychange',visible);};
   },[id]);
@@ -41,8 +41,8 @@ function Visit({id}:{id:string}) {
   return <section className="m-detail-card m-visit"><div className="m-section-title"><span>02</span><div><h2>Kunjungan dan antrean</h2><p>Estimasi dapat berubah mengikuti kondisi pelayanan.</p></div></div>
     <div className="m-queue-line"><Clock3 size={20}/><div><strong>{queue?status:'Memuat status kunjungan…'}</strong>{queue?.ticket&&<p>Nomor antrean {queue.ticket}</p>}{queue?.eta&&<p>Perkiraan mulai {time.format(queue.eta)} WIB</p>}{queue?.estimate&&<p>Perkiraan selesai {time.format(queue.estimate)} WIB</p>}</div></div>
     <p className="m-updated" role="status">{failed?'Gagal memperbarui. ':''}{updated?'Terakhir diperbarui '+time.format(updated)+' WIB.':'Menunggu pembaruan.'}</p>
-    {queue?.status==='DONE'&&<><div className="m-invoice"><span>Tagihan</span><strong>{settlement?.invoice?money.format(settlement.invoice.total):'Belum dibuat'}</strong><small>{settlement?.invoice?(settlement.invoice.paid_at?'Lunas ('+settlement.invoice.method+')':'Belum lunas'):''}</small></div>
-      {settlement?.feedback?<p role="status">Terima kasih, feedback kamu sudah tercatat ({settlement.feedback.rating}/5).</p>:settlement&&<form className="m-form" onSubmit={submit}><h3>Feedback sukarela</h3><p>Kamu boleh melewati bagian ini.</p><label>Rating<select value={rating} onChange={e=>setRating(e.target.value)} required><option value="">Pilih rating</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}</select></label><label>Komentar (opsional)<textarea value={comment} onChange={e=>setComment(e.target.value)} maxLength={1000}/></label><p role="status">{message}</p><button className="m-primary" disabled={sending}>{sending?'Mengirim…':'Kirim feedback'} <ArrowRight size={17}/></button></form>}
+    {queue?.status==='DONE'&&<><div className="m-invoice"><span>Tagihan</span><strong>{settlement?.invoice?money.format(settlement.invoice.total):'Belum dibuat'}</strong><small>{settlement?.invoice?(settlement.invoice.paid_at?'Lunas ('+settlement.invoice.method+') · '+date.format(settlement.invoice.paid_at)+' '+time.format(settlement.invoice.paid_at)+' WIB':'Belum lunas'):''}</small>{settlement?.invoice?.paid_at&&<small>Pembayaran dicatat setelah diverifikasi petugas.</small>}</div>
+      {settlement?.feedback?<p role="status">Terima kasih, feedback kamu sudah tercatat ({settlement.feedback.rating}/5).</p>:settlement&&!settlement.invoice?.paid_at?<p role="status">Feedback tersedia setelah petugas mencatat pembayaran lunas.</p>:settlement&&<form className="m-form" onSubmit={submit}><h3>Feedback sukarela</h3><p>Kamu boleh melewati bagian ini.</p><label>Rating<select value={rating} onChange={e=>setRating(e.target.value)} required><option value="">Pilih rating</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}</select></label><label>Komentar (opsional)<textarea value={comment} onChange={e=>setComment(e.target.value)} maxLength={1000}/></label><p role="status">{message}</p><button className="m-primary" disabled={sending}>{sending?'Mengirim…':'Kirim feedback'} <ArrowRight size={17}/></button></form>}
     </>}
   </section>;
 }

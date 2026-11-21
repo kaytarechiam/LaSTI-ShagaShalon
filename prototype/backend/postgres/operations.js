@@ -118,11 +118,27 @@ export function createPostgresOperations(db) {
   }
   async function board(account,params) {
     const day=params.get('day')||today(), to=params.get('to')||day;
-    if (!validDay(day) || !validDay(to) || to<day || Date.parse(to)-Date.parse(day)>31*86400000) fail(400,'Pilih rentang tanggal hingga 31 hari.');
+    if (!validDay(day) || !validDay(to) || to<day || Date.parse(to)-Date.parse(day)>89*86400000) fail(400,'Pilih rentang tanggal hingga 90 hari.');
     const settings=await getConfig(db), mine=account.role==='capster' ? (await actorCapster(db,account))||'' : null;
     const result=await db.query(query+' WHERE r.day BETWEEN $1 AND $2'+(mine===null?'':' AND r.capster=$3')+' ORDER BY r.start',mine===null?[day,to]:[day,to,mine]);
-    const rows=[];
-    for (const entry of result.rows) rows.push(await withItems(db,entry));
+    const itemsByReservation=new Map();
+    if (result.rows.length) {
+      const items=await db.query(`SELECT reservation,service AS id,name,price,duration FROM reservation_items
+        WHERE reservation=ANY($1::text[]) ORDER BY reservation,position`,[result.rows.map(entry=>entry.id)]);
+      for (const item of items.rows) {
+        const {reservation,...details}=item;
+        if (!itemsByReservation.has(reservation)) itemsByReservation.set(reservation,[]);
+        itemsByReservation.get(reservation).push(details);
+      }
+    }
+    const rows=result.rows.map(entry=>({...entry,items:itemsByReservation.get(entry.id)||[]}));
+    if (account.role==='staff') {
+      const settled=await db.query(`SELECT i.reservation, p.created AS paid_at FROM invoices i
+        LEFT JOIN payments p ON p.reservation=i.reservation
+        JOIN reservations r ON r.id=i.reservation WHERE r.day BETWEEN $1 AND $2`,[day,to]);
+      const lookup=new Map(settled.rows.map(x=>[x.reservation,x.paid_at ? 'PAID' : 'UNPAID']));
+      for (const row of rows) row.payment_status=lookup.get(row.id) || (row.visit_status==='DONE'?'READY':'NOT_READY');
+    }
     const pending=new Map(), now=Date.now();
     for (const r of rows.filter(r=>r.visit_status==='ACTIVE' && r.day===today())) pending.set(r.capster,Math.max(now,r.estimate)+settings.rules.buffer*60000);
     for (const r of rows.filter(r=>r.visit_status==='WAITING')) {

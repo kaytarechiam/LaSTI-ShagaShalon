@@ -81,6 +81,7 @@ try {
     assert.equal((await staff('/api/ops/ready',{ready:true})).status,200);
     assert.equal((await staff('/api/ops/board?day='+chosen.day)).body.mine,testCapster);
     assert.equal((await staff('/api/ops/start',{id:visitId})).body.visit_status,'ACTIVE');
+    assert.equal((await first('/api/settlement/feedback',{id:visitId,rating:5})).status,409);
     assert.equal((await staff('/api/ops/estimate',{id:visitId,minutes:30})).status,200);
     assert.equal((await staff('/api/ops/finish',{id:visitId})).body.visit_status,'DONE');
     await tx.query("UPDATE accounts SET role='staff' WHERE id=$1",[staffAccount.rows[0].id]);
@@ -88,6 +89,11 @@ try {
     assert.equal((await second('/api/settlement/feedback',{id:visitId,rating:5,comment:'x'})).status,404);
     assert.equal((await first('/api/settlement/create',{id:visitId})).status,403);
     assert.equal((await staff('/api/settlement/create',{id:visitId})).body.total,45000);
+    assert.equal((await first('/api/settlement/feedback',{id:visitId,rating:5})).status,409);
+    // Existing feedback from before the paid requirement remains readable.
+    await tx.query('INSERT INTO feedback(reservation,account,rating,comment,created) VALUES($1,$2,4,$3,$4)',[visitId,customerAccount.rows[0].id,'Uji data lama',Date.now()]);
+    assert.equal((await first('/api/settlement/detail?id='+visitId)).body.feedback.rating,4);
+    await tx.query('DELETE FROM feedback WHERE reservation=$1',[visitId]); // synthetic fixture, transaction rolled back
     assert.equal((await staff('/api/settlement/adjust',{id:visitId,total:40000,reason:'Koreksi'})).body.total,40000);
     assert.equal((await staff('/api/settlement/pay',{id:visitId,method:'CASH',received:true})).body.paid_amount,40000);
     assert.equal((await staff('/api/settlement/pay',{id:visitId,method:'CASH',received:true})).body.paid_amount,40000);
@@ -102,6 +108,30 @@ try {
     assert.equal(report.status,200,JSON.stringify(report.body));
     assert.ok(report.body.payments.total>=40000);
     assert.ok(report.body.feedback.count>=1);
+    assert.equal(report.body.series.length,1);
+    assert.equal(report.body.series[0].paid_total,report.body.payments.total);
+    assert.equal(report.body.series[0].visits,report.body.counts.visits);
+    assert.ok(report.body.invoices.count>=1);
+    assert.ok(report.body.ratings.some(row=>row.rating===5 && row.count>=1));
+    assert.equal((await staff('/api/settlement/report?from=2026-01-01&to=2026-04-01')).status,400);
+    const walkId=randomBytes(16).toString('hex'), walkDay='2098-06-01';
+    await tx.query(`INSERT INTO reservations(id,account,service,capster,day,start,"end",name,phone,status)
+      VALUES($1,$2,$3,$4,$5,1,2,'Uji walk-in','081234567890','CONFIRMED')`,[walkId,customerAccount.rows[0].id,chosen.service,testCapster,walkDay]);
+    await tx.query("INSERT INTO visits(reservation,day,ticket,status,arrived,channel) VALUES($1,$2,1,'DONE',1,'WALK_IN')",[walkId,walkDay]);
+    await tx.query('INSERT INTO invoices(reservation,original_total,total,created,created_by) VALUES($1,5000,5000,$2,$3)',[walkId,Date.parse('2098-06-01T00:00:00+07:00'),staffAccount.rows[0].id]);
+    await tx.query("INSERT INTO payments(reservation,amount,method,actor,created) VALUES($1,5000,'CASH',$2,$3)",[walkId,staffAccount.rows[0].id,Date.parse('2098-06-01T23:59:59+07:00')]);
+    await tx.query('INSERT INTO feedback(reservation,account,rating,comment,created) VALUES($1,$2,3,$3,$4)',[walkId,customerAccount.rows[0].id,'Batas WIB',Date.parse('2098-06-02T00:00:00+07:00')]);
+    const walkReport=await staff('/api/settlement/report?from='+walkDay+'&to='+walkDay);
+    assert.equal(walkReport.status,200);
+    assert.equal(walkReport.body.counts.walkins,1);
+    assert.equal(walkReport.body.counts.reservations,0);
+    assert.equal(walkReport.body.counts.visits,1);
+    assert.equal(walkReport.body.payments.total,5000);
+    assert.equal(walkReport.body.series[0].paid_total,5000);
+    assert.equal(walkReport.body.feedback.count,0);
+    const nextDay=await staff('/api/settlement/report?from=2098-06-02&to=2098-06-02');
+    assert.equal(nextDay.body.payments.count,0);
+    assert.equal(nextDay.body.feedback.count,1);
     assert.equal((await staff('/api/settlement/followup',{id:visitId,note:'Terima kasih'})).status,200);
     throw intentionalRollback;
   });

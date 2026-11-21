@@ -72,9 +72,8 @@
 .booking-page button.secondary { background: transparent; color: var(--brown); }
 .booking-page button:disabled { opacity: .55; cursor: wait; }
 .booking-page :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-.booking-page :is(h1,h2,h3,h4,h5,h6,p,span,small,label,button,input,select,textarea,a,strong,td,th,legend,li) {
-  font-family: 'Shaga Inter', sans-serif !important;
-}
+.booking-page { font-family: 'Shaga Inter', sans-serif; }
+.booking-page :is(button,input,select,textarea) { font-family: 'Shaga Inter', sans-serif; }
 .booking-page .booking-content .m-auth-art .m-art-caption p { color: #fff !important; }
 .booking-page [hidden] { display: none !important; }
 .booking-content .message { color: #812b24; min-height: 1.6em; margin: 0; }

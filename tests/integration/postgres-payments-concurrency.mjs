@@ -33,9 +33,20 @@ try {
   const rows=await db.query('SELECT count(*)::int AS count FROM payments WHERE reservation=$1',[id]);
   assert.equal(rows.rows[0].count,1);
   console.log('Concurrent duplicate payments produced one payment record.');
+  const customer={id:actor,role:'customer'};
+  const feedback=await Promise.allSettled([
+    service.route(customer,'/api/settlement/feedback',params,{id,rating:5,comment:'A'}),
+    service.route(customer,'/api/settlement/feedback',params,{id,rating:4,comment:'B'}),
+  ]);
+  assert.equal(feedback.filter(item=>item.status==='fulfilled').length,1);
+  const rejected=feedback.find(item=>item.status==='rejected');
+  assert.equal(rejected?.reason?.status,409);
+  assert.equal((await db.query('SELECT count(*)::int AS count FROM feedback WHERE reservation=$1',[id])).rows[0].count,1);
+  console.log('Concurrent feedback produced one feedback record.');
 } finally {
   if (actor) await db.transaction(async tx=>{
     await tx.query('DELETE FROM salon_events WHERE subject=$1',[id]);
+    await tx.query('DELETE FROM feedback WHERE reservation=$1',[id]);
     await tx.query('DELETE FROM payments WHERE reservation=$1',[id]);
     await tx.query('DELETE FROM invoices WHERE reservation=$1',[id]);
     await tx.query('DELETE FROM reservation_items WHERE reservation=$1',[id]);

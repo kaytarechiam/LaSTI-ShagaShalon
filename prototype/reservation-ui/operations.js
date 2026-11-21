@@ -5,8 +5,9 @@ const rulesLabels={open:'Jam buka',close:'Jam tutup Senin–Sabtu',sunday:'Jam t
 export async function showOperations({account,app,api,escape:e,date,time,price}) {
   document.querySelector('.booking-layout').classList.add('ops-layout');
   document.title = names[account.role]+' · Shaga Salon';
-  const currentDay = new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Jakarta'}).format(new Date());
-  let day=currentDay, to=currentDay, filter='', response, walkKey=crypto.randomUUID();
+  const jakartaDay = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Jakarta'}).format(new Date());
+  let currentDay = jakartaDay();
+  let day=currentDay, to=currentDay, filter='', paymentFilter='', search='', response, walkKey=crypto.randomUUID();
   let generation=0, dirty=false, busy=false, lastUpdated=null;
   const role=account.role;
   let section=role==='manager'?(location.hash==='#pengaturan'?'settings':'overview'):'desk';
@@ -16,16 +17,24 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
   const formData=form=>Object.fromEntries(new FormData(form));
   const capsterName=id=>response.settings.capsters.find(x=>x.id===id)?.name || id;
   const formatTime=value=>value ? time.format(value)+' WIB' : '—';
+  const formatDay=value=>new Intl.DateTimeFormat('id-ID',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(value+'T00:00:00Z'));
   const activeChoices=items=>items.filter(x=>x.active).map(x=>option(x.id,x.name)).join('');
   const heading=()=>({staff:'Reservasi dan kedatangan',capster:'Jadwal pelayanan',manager:section==='settings'?'Pengaturan salon':'Ringkasan operasional'})[role];
 
   function controls() {
     const staffFilter = '<label>Status<select name="status">'+option('','Semua status')+
       Object.entries(status).map(([key,label])=>option(key,label,filter===key)).join('')+'</select></label>';
-    return `<form id="ops-date" class="ops-controls"><label>${role==='manager'?'Dari tanggal':'Tanggal'}
+    if (role==='manager') return `<form id="ops-date" class="ops-controls"><p class="ops-period">${day===currentDay&&to===currentDay?'Hari ini': 'Periode'}: ${e(formatDay(day))}${to!==day?' s.d. '+e(formatDay(to)):''} · WIB</p>
+      ${day===currentDay&&to===currentDay?'':button('Lihat hari ini','today')}
+      <details class="ops-period-select"><summary>Pilih rentang tanggal</summary><div class="ops-fields">
+      <label>Dari tanggal<input type="date" value="${e(day)}" name="day" required></label>
+      <label>Sampai tanggal<input type="date" value="${e(to)}" name="to" required></label></div>
+      <small>Maksimal 90 hari.</small> ${button('Tampilkan','filter','submit')}</details>${formAlert}</form>`;
+    return `<form id="ops-date" class="ops-controls"><label>Tanggal
       <input type="date" value="${e(day)}" name="day" required></label>
-      ${role==='manager'?`<label>Sampai tanggal<input type="date" value="${e(to)}" name="to" required></label>`:''}
       ${role==='staff'?staffFilter:''}
+      ${role==='staff'?`<label>Pembayaran<select name="payment">${[['','Semua pembayaran'],['NOT_READY','Pelayanan belum selesai'],['READY','Siap ditagihkan'],['UNPAID','Belum lunas'],['PAID','Lunas']].map(([v,l])=>option(v,l,paymentFilter===v)).join('')}</select></label>`:''}
+      ${role==='staff'?`<label>Cari nama, kode, atau telepon<input type="search" name="search" value="${e(search)}" maxlength="100"></label>`:''}
       ${button('Tampilkan','filter','submit')}${formAlert}</form>`;
   }
   function staffActions(r) {
@@ -53,6 +62,7 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
     if (!rows.length) return '<p class="ops-empty">Belum ada data untuk pilihan ini.</p>';
     return '<ul class="ops-records">'+rows.map(r=>`<li><article class="ops-record">
       <div><span class="ops-tag">${status[r.visit_status||r.status]||'—'}</span>
+        ${role==='staff'&&r.payment_status?`<span class="ops-tag" data-payment-status="${e(r.id)}">${e(({NOT_READY:'Pelayanan belum selesai',READY:'Siap ditagihkan',UNPAID:'Belum lunas',PAID:'Lunas'})[r.payment_status]||'')}</span>`:''}
         <h3>${e(r.name)}</h3><p>${e(capsterName(r.capster))}</p>
         ${r.items.map(item=>`<p>${e(item.name)} · ${e(price.format(item.price))} · ${item.duration} menit</p>`).join('')}
         <p><strong>Total ${e(price.format(r.booked_price))} · ${r.booked_duration} menit</strong></p>
@@ -83,9 +93,9 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
   function overview() {
     const rows=response.rows;
     const late=rows.filter(r=>(r.eta||r.started||0)>r.start+60000).length;
-    const metrics=[['Reservasi terkonfirmasi',rows.filter(r=>r.status==='CONFIRMED').length],['Kunjungan',rows.filter(r=>r.ticket).length],
-      ['Sedang menunggu',rows.filter(r=>r.visit_status==='WAITING').length],['Sesi selesai',rows.filter(r=>r.visit_status==='DONE').length],['Lewat satu menit dari jadwal',late]];
-    return '<div id="management-report"></div><div class="ops-metrics">'+metrics.map(([label,count])=>`<div><strong>${count}</strong><span>${label}</span></div>`).join('')+'</div>'+
+    const metrics=[['Sedang menunggu',rows.filter(r=>r.visit_status==='WAITING').length],
+      ['Perkiraan / mulai lewat satu menit dari jadwal',late]];
+    return '<div id="management-report"></div><h2>Kondisi operasional</h2><div class="ops-metrics">'+metrics.map(([label,count])=>`<div><strong>${count}</strong><span>${label}</span></div>`).join('')+'</div>'+
       '<h2>Aktivitas periode ini</h2>'+cards(rows);
   }
   function settingsPanel() {
@@ -116,7 +126,8 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
   }
   function render(notice='') {
     dirty=false;
-    const rows=response.rows.filter(r=>!filter || (r.visit_status||r.status)===filter);
+    const term=search.trim().toLocaleLowerCase('id-ID');
+    const rows=response.rows.filter(r=>(!filter || (r.visit_status||r.status)===filter) && (!paymentFilter || r.payment_status===paymentFilter) && (!term || [r.name,r.code,r.phone].some(value=>String(value||'').toLocaleLowerCase('id-ID').includes(term))));
     const visits=rows.filter(r=>r.ticket);
     app.innerHTML=`<div class="ops-top"><div><p class="step">${e(names[role])}</p><h1>${e(heading())}</h1></div>
       ${role==='staff'?'<a class="action" href="/reservasi">Buat reservasi</a>':''}
@@ -164,24 +175,33 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
     app.querySelector('#refresh-status').textContent='Diperbarui '+formatTime(lastUpdated)+' · Estimasi dapat berubah.';
     if (role==='manager' && section!=='settings') await showReport();
   }
+  function chart(title,rows,format) {
+    if (!rows.length || rows.every(row=>!Number(row.value))) return `<section class="ops-chart"><h3>${e(title)}</h3><p>Belum ada data untuk periode ini.</p></section>`;
+    const max=Math.max(...rows.map(row=>Number(row.value)||0),1);
+    return `<section class="ops-chart"><h3>${e(title)}</h3><div class="ops-chart-bars" aria-hidden="true">${rows.map(row=>`<div class="ops-chart-row"><span>${e(row.label)}</span><div class="ops-chart-track"><div class="ops-chart-fill" style="width:${Math.max(0,Math.min(100,Number(row.value)/max*100))}%"></div></div><strong>${e(format(row.value))}</strong></div>`).join('')}</div><details><summary>Data ${e(title)}</summary><table><thead><tr><th>Periode / kategori</th><th>Nilai</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${e(row.label)}</td><td>${e(format(row.value))}</td></tr>`).join('')}</tbody></table></details></section>`;
+  }
   async function showReport() {
     const target=app.querySelector('#management-report'); if (!target) return;
+    target.textContent='Memuat laporan…';
     try {
       const r=await api('/settlement/report?'+new URLSearchParams({from:day,to}));
       if (!target.isConnected) return;
       target.innerHTML='<h2>Laporan periode</h2><p>Reservasi dan kunjungan berdasarkan tanggal kunjungan; pembayaran dan feedback berdasarkan waktu pencatatan (WIB).</p>'+
-        '<div class="ops-metrics">'+[['Reservasi terkonfirmasi',r.counts.reservations],['Kunjungan',r.counts.visits],['Walk-in',r.counts.walkins],['Selesai',r.counts.finished],['Pembayaran lunas',r.payments.count],['Total lunas',price.format(r.payments.total)],['Feedback',r.feedback.count],['Rata-rata rating',r.feedback.average?.toFixed(1)||'—']].map(([label,value])=>'<div><strong>'+e(value)+'</strong><span>'+e(label)+'</span></div>').join('')+'</div>'+
-        '<p>Metode pembayaran: '+e(r.methods.map(x=>x.method+' '+price.format(x.total)).join(' · ')||'Belum ada')+'</p><p>Layanan selesai terbanyak: '+e(r.popular.map(x=>x.name+' ('+x.count+')').join(', ')||'Belum ada')+'</p>'+
+        '<div class="ops-metrics">'+[['Reservasi terkonfirmasi',r.counts.reservations],['Kunjungan',r.counts.visits],['Walk-in',r.counts.walkins],['Selesai',r.counts.finished],['Tagihan dibuat',r.invoices.count],['Tagihan belum lunas',r.invoices.unpaid_count],['Nilai belum lunas',price.format(r.invoices.unpaid_total)],['Pembayaran lunas',r.payments.count],['Total lunas',price.format(r.payments.total)],['Feedback',r.feedback.count],['Rata-rata rating',r.feedback.average?.toFixed(1)||'—']].map(([label,value])=>'<div><strong>'+e(value)+'</strong><span>'+e(label)+'</span></div>').join('')+'</div>'+
+        '<p>Tagihan dihitung berdasarkan waktu dibuat; status belum lunas adalah keadaan terkini. Nilai lunas berdasarkan waktu pencatatan pembayaran.</p>'+
+        '<p>Status reservasi: '+e(r.statuses.map(x=>(status[x.status]||x.status)+' '+x.count).join(' · ')||'Belum ada')+' · Distribusi rating: '+e(r.ratings.map(x=>x.rating+'/5: '+x.count).join(' · ')||'Belum ada')+'</p>'+
+        '<div class="ops-charts">'+(r.series.length>1?chart('Kunjungan per hari',r.series.map(x=>({label:x.day,value:x.visits})),String)+chart('Pembayaran lunas per hari',r.series.map(x=>({label:x.day,value:x.paid_total})),price.format.bind(price)):'')+chart('Layanan selesai terbanyak',r.popular.map(x=>({label:x.name,value:x.count})),String)+'</div>'+
+        '<p>Metode pembayaran: '+e(r.methods.map(x=>({CASH:'Tunai',TRANSFER:'Transfer',OTHER:'Lainnya'}[x.method]||x.method)+' '+price.format(x.total)).join(' · ')||'Belum ada')+'</p><p>Layanan selesai terbanyak: '+e(r.popular.map(x=>x.name+' ('+x.count+')').join(', ')||'Belum ada')+'</p>'+
         '<h3>Feedback terbaru</h3>'+r.comments.map(f=>'<article class="ops-panel"><strong>'+e(f.rating)+'/5</strong><p>'+e(f.comment||'Tanpa komentar')+'</p>'+((f.followups||[]).map(x=>'<p>Tindak lanjut: '+e(x.note)+'</p>').join(''))+'<form data-followup="'+e(f.reservation)+'"><label>Tindak lanjut<textarea name="note" maxlength="1000" required></textarea></label><button type="submit">Simpan tindak lanjut</button>'+formAlert+'</form></article>').join('');
     } catch(error) { if (target.isConnected) target.textContent='Laporan tidak dapat dimuat: '+(error.message||'periksa koneksi'); }
   }
   async function settlementPanel(panel) {
     const box=panel.querySelector('div'), id=panel.dataset.settlement;
     const {invoice}=await api('/settlement/detail?'+new URLSearchParams({id}));
-    box.innerHTML=invoice ? '<p>Total tagihan: <strong>'+e(price.format(invoice.total))+'</strong> · '+(invoice.paid_at?'Lunas ('+e(invoice.method)+')':'Belum lunas')+'</p>'+
+    box.innerHTML=invoice ? '<p>Total tagihan: <strong>'+e(price.format(invoice.total))+'</strong> · '+(invoice.paid_at?'Lunas ('+e(invoice.method)+') · '+e(date.format(invoice.paid_at))+' '+e(formatTime(invoice.paid_at)):'Belum lunas')+'</p>'+
       (invoice.adjustments||[]).map(a=>'<p>Koreksi oleh '+e(a.actor)+': '+e(price.format(a.old_total))+' → '+e(price.format(a.new_total))+' · '+e(a.reason)+'</p>').join('')+
       (invoice.paid_at?'':`<form data-settle="adjust"><label>Total koreksi (Rp)<input name="total" type="number" min="0" max="1000000000" required></label><label>Alasan koreksi<input name="reason" maxlength="500" required></label><button type="submit">Simpan koreksi</button>${formAlert}</form>
-      <form data-settle="pay"><label>Metode<select name="method"><option value="CASH">Tunai</option><option value="TRANSFER">Transfer</option><option value="OTHER">Lainnya</option></select></label><label><input name="received" type="checkbox" required> Saya memastikan pembayaran telah diterima</label><button type="submit">Catat pembayaran</button>${formAlert}</form>`) :
+      <form data-settle="pay"><label>Metode<select name="method"><option value="CASH">Tunai</option><option value="TRANSFER">Transfer</option><option value="OTHER">Lainnya</option></select></label><label class="ops-check"><input name="received" type="checkbox" required> Saya memastikan pembayaran telah diterima</label><p>Pembayaran hanya dicatat setelah petugas memverifikasi penerimaan.</p><button type="submit">Catat pembayaran lunas</button>${formAlert}</form>`) :
       `<p>Tagihan dibuat dari harga layanan yang tercatat saat kunjungan.</p><form data-settle="create"><button type="submit">Buat tagihan</button>${formAlert}</form>`;
   }
   app.addEventListener('toggle',event=>{
@@ -196,6 +216,11 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
     const control=event.target.closest('button[data-action]');
     if (!control || control.type==='submit') return;
     const action=control.dataset.action;
+    if (action==='today' && role==='manager') {
+      const previous={day,to}; currentDay=jakartaDay(); day=currentDay; to=currentDay; dirty=false;
+      try { await load(); } catch(error) { ({day,to}=previous); report(error,app.querySelector('#ops-message')); }
+      return;
+    }
     if (action==='overview' || action==='settings') { section=action; const hash=action==='settings'?'#pengaturan':''; if(location.hash!==hash) location.hash=hash; else { render(); if(action==='overview') void showReport(); } return; }
     const target=app.querySelector('#ops-message');
     busy=true;
@@ -222,13 +247,22 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
     if (control) control.disabled=true;
     try {
       if (form.id==='ops-date') {
-        const previous={day,to,filter};
-        day=data.day; to=data.to||day; filter=data.status||'';
-        try { await load(); } catch(error) { ({day,to,filter}=previous); throw error; }
+        const previous={day,to,filter,paymentFilter,search};
+        day=data.day; to=data.to||day; filter=data.status||''; paymentFilter=data.payment||''; search=(data.search||'').slice(0,100);
+        try { await load(); } catch(error) { ({day,to,filter,paymentFilter,search}=previous); throw error; }
       } else if (form.dataset.settle) {
         const panel=form.closest('[data-settlement]'), action=form.dataset.settle;
-        await api('/settlement/'+action,{id:panel.dataset.settlement,...data,total:Number(data.total),received:data.received==='on'});
+        const settlement=await api('/settlement/'+action,{id:panel.dataset.settlement,...data,total:Number(data.total),received:data.received==='on'});
+        if (action==='create' || action==='pay') {
+          const state=settlement.paid_at?'PAID':'UNPAID';
+          const row=response.rows.find(item=>item.id===panel.dataset.settlement);
+          if (row) row.payment_status=state;
+          for (const tag of app.querySelectorAll('[data-payment-status]')) {
+            if (tag.dataset.paymentStatus===panel.dataset.settlement) tag.textContent=state==='PAID'?'Lunas':'Belum lunas';
+          }
+        }
         await settlementPanel(panel);
+        dirty=false;
       } else if (form.dataset.followup) {
         await api('/settlement/followup',{id:form.dataset.followup,note:data.note});
         await showReport();
@@ -262,6 +296,8 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
   let polling=false;
   const refresh=async()=>{
     if (polling || busy || dirty || document.hidden || !app.isConnected || section==='settings' || app.querySelector('details[open]') || app.contains(document.activeElement) && document.activeElement.matches('input,select,textarea')) return;
+    const nextDay=jakartaDay();
+    if (nextDay!==currentDay) { if(day===currentDay && to===currentDay) { day=nextDay; to=nextDay; } currentDay=nextDay; }
     polling=true;
     try { await load(undefined,true); }
     catch { const target=app.querySelector('#refresh-status'); if(target) target.textContent='Gagal memperbarui. '+(lastUpdated?'Terakhir diperbarui '+formatTime(lastUpdated)+'. ':'')+'Data mungkin sudah berubah; muat ulang halaman.'; }

@@ -38,7 +38,7 @@ Remove-Item Env:SHAGA_CREATE_TEAM, Env:SHAGA_TEAM_PASSWORD
 | Resepsionis | `/resepsionis` | Cari reservasi salon, buat untuk pelanggan, check-in, terima walk-in, lihat antrean. |
 | Capster | `/capster` | Lihat jadwal sendiri, tandai siap, sesuaikan layanan yang disetujui pelanggan, mulai, perbarui estimasi, dan selesaikan sesi. |
 | Manajer | `/manajemen` | Filter ringkasan, ubah katalog contoh dan pengaturan, simpan draf, periksa konflik, dan terapkan konfigurasi. |
-| Kasir (rencana) | Belum tersedia | Nantinya lihat tagihan layanan aktual dan catat pelunasan setelah dana diterima. Manajer membaca ringkasannya. |
+| Kasir (resepsionis) | `/resepsionis` | Buat tagihan untuk sesi selesai, koreksi dengan alasan, lalu catat pelunasan setelah penerimaan diverifikasi. |
 
 ## Skenario demo
 
@@ -49,4 +49,4 @@ Remove-Item Env:SHAGA_CREATE_TEAM, Env:SHAGA_TEAM_PASSWORD
 
 Harga dan durasi lama disimpan untuk reservasi yang sudah ada. Reservasi yang dibuat resepsionis atas nama tamu dapat dilihat tim salon. Reservasi mandiri terikat ke akun pelanggan yang membuatnya. Jadwal, katalog dan data capster awal berasal dari data contoh. Manajemen dapat mengubah entri contoh, menonaktifkan layanan/capster, serta mengatur satu shift dan satu hari libur mingguan per capster. Alokasi terkonfirmasi dipertahankan hingga interval semula berakhir. Penjadwalan saat sesi berjalan juga mempertimbangkan perkiraan selesai dan jeda.
 
-Tanpa `DATABASE_URL`, data lokal memakai SQLite dalam `LOCALAPPDATA\ShagaSalonPrototype`; dengan `DATABASE_URL`, data memakai database PostgreSQL yang ditunjuk. Notifikasi reservasi dicatat sebagai simulasi. Pembayaran, tanggapan pelanggan dan ringkasannya masih rencana lanjutan. Feedback nantinya bersifat sukarela dan hanya untuk kunjungan selesai milik akun pelanggan.
+Tanpa `DATABASE_URL`, data lokal memakai SQLite dalam `LOCALAPPDATA\ShagaSalonPrototype`; dengan `DATABASE_URL`, data memakai database PostgreSQL yang ditunjuk. Notifikasi reservasi dicatat sebagai simulasi. Tagihan, pembayaran, dan feedback memerlukan migrasi PostgreSQL `003-settlement.sql`. Sistem tidak memproses dana: petugas mencatat pembayaran setelah memastikan penerimaannya. Feedback baru bersifat sukarela dan hanya tersedia setelah kunjungan milik pelanggan selesai serta pelunasan dicatat. Feedback lama tetap dipertahankan. Reservasi atau walk-in yang dibuat staf tidak otomatis ditautkan ke akun pelanggan melalui nama atau telepon.

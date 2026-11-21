@@ -66,4 +66,6 @@
 @media(max-width:800px) {
  .system-team .system-mobile .system-link { color:#705d51!important; }
  .system-team .system-mobile .system-link.is-active { color:#52352b!important; background:#eee1d6; }
+ .system-page .system-secondary { display:flex; margin-left:auto; padding:0; border:0; }
+ .system-page .system-secondary .system-site { display:none; }
 }

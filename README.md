@@ -56,7 +56,8 @@ secara lokal dan tidak disimpan dalam Git; Vercel menjalankan build saat deploy.
 Untuk database pengembangan baru yang masih kosong, siapkan `DATABASE_URL`
 lalu jalankan `npm run db:init:dev` sekali sebelum menjalankan server.
 Untuk database yang sudah memiliki skema sebelumnya, terapkan migrasi
-`prototype/backend/postgres/003-settlement.sql` sebelum menjalankan versi
+`prototype/backend/postgres/003-settlement.sql` dan kemudian
+`prototype/backend/postgres/004-report-indexes.sql` sebelum menjalankan versi
 baru. Jangan menjalankan ulang skema awal pada database yang berisi data.
 Petunjuk lengkap ada di [panduan Neon dan Vercel](prototype/NEON-VERCEL.md).
 
@@ -74,10 +75,21 @@ Tanpa konfigurasi itu, pengujian integrasi PostgreSQL akan dilewati.
 ## Peran dan batasan
 
 Pelanggan dapat memberikan feedback setelah kunjungan yang terhubung ke
-akunnya selesai. Reservasi atau walk-in yang dibuat melalui akun staf belum
+akunnya selesai dan pembayaran telah dicatat lunas oleh petugas. Feedback lama
+yang dibuat sebelum aturan ini tetap tersimpan dan dapat ditampilkan. Reservasi atau walk-in yang dibuat melalui akun staf belum
 otomatis terhubung ke akun pelanggan; pencocokan nama atau telepon tidak
 digunakan sebagai bukti kepemilikan. Resepsionis merangkap kasir dalam
 prototype ini.
+
+Dashboard manajemen otomatis memuat hari ini dalam zona Asia/Jakarta; rentang
+kustom dibatasi 90 hari. Reservasi dan kunjungan dihitung berdasarkan tanggal
+kunjungan, pembayaran dan feedback menurut waktu pencatatannya, dan tagihan
+menurut waktu dibuat. Jumlah tagihan belum lunas menunjukkan kondisi terkini
+untuk tagihan yang dibuat pada periode itu. Total pembayaran hanya mencakup
+pembayaran yang telah dicatat, bukan tagihan yang belum lunas. Grafik dan tabel
+menggunakan data yang sama: jumlah kunjungan berdasarkan tanggal kunjungan,
+total lunas berdasarkan waktu pencatatan, dan layanan terpopuler berdasarkan
+kunjungan selesai pada tanggal kunjungan. Tidak ada perhitungan laba atau biaya.
 
 Rancangan proses bisnis yang lebih luas dijelaskan dalam
 [laporan Delivery 2](https://docs.google.com/document/d/1dqlcNDuBCY4aRa1RYe-p2kPp_U5ttwUdygrirpaqWwg/edit?tab=t.siyltlcmt1c1).

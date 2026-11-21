@@ -14,7 +14,7 @@ export function createSettlement(db) {
       if (account.role !== 'manager') fail(403,'Hanya manajemen dapat melihat laporan.');
       const from=params.get('from'), to=params.get('to');
       const valid = d => /^\d{4}-\d{2}-\d{2}$/.test(d||'') && !Number.isNaN(Date.parse(d+'T00:00:00Z')) && new Date(d+'T00:00:00Z').toISOString().slice(0,10)===d;
-      if (!valid(from)||!valid(to)||to<from||Date.parse(to)-Date.parse(from)>31*86400000) fail(400,'Pilih rentang tanggal hingga 31 hari.');
+      if (!valid(from)||!valid(to)||to<from||Date.parse(to)-Date.parse(from)>89*86400000) fail(400,'Pilih rentang tanggal hingga 90 hari.');
       const counts=await one(db,`SELECT count(*) FILTER (WHERE r.status='CONFIRMED' AND v.channel IS DISTINCT FROM 'WALK_IN')::int AS reservations,
         count(v.reservation)::int AS visits, count(*) FILTER (WHERE v.channel='WALK_IN')::int AS walkins,
         count(*) FILTER (WHERE v.status='DONE')::int AS finished
@@ -32,7 +32,29 @@ export function createSettlement(db) {
         (SELECT json_agg(json_build_object('note',n.note,'created',n.created) ORDER BY n.created) FROM feedback_followups n WHERE n.reservation=f.reservation) AS followups
         FROM feedback f WHERE f.created >= $1 AND f.created < $2 ORDER BY f.created DESC LIMIT 100`,
         [Date.parse(from+'T00:00:00+07:00'),Date.parse(to+'T00:00:00+07:00')+86400000])).rows;
-      return {counts,payments,methods,feedback,popular,comments};
+      const start=Date.parse(from+'T00:00:00+07:00'), end=Date.parse(to+'T00:00:00+07:00')+86400000;
+      const invoices=await one(db,`SELECT count(*)::int AS count,
+        count(*) FILTER (WHERE p.reservation IS NULL)::int AS unpaid_count,
+        COALESCE(sum(i.total) FILTER (WHERE p.reservation IS NULL),0)::bigint AS unpaid_total
+        FROM invoices i LEFT JOIN payments p ON p.reservation=i.reservation
+        WHERE i.created >= $1 AND i.created < $2`,[start,end]);
+      const statuses=(await db.query(`SELECT status,count(*)::int AS count FROM reservations
+        WHERE day BETWEEN $1 AND $2 GROUP BY status ORDER BY status`,[from,to])).rows;
+      const ratings=(await db.query(`SELECT rating,count(*)::int AS count FROM feedback
+        WHERE created >= $1 AND created < $2 GROUP BY rating ORDER BY rating`,[start,end])).rows;
+      const visitDays=(await db.query(`SELECT day,count(*)::int AS count FROM visits
+        WHERE day BETWEEN $1 AND $2 GROUP BY day`,[from,to])).rows;
+      const paymentDays=(await db.query(`SELECT to_char(to_timestamp(created/1000.0) AT TIME ZONE 'Asia/Jakarta','YYYY-MM-DD') AS day,
+        count(*)::int AS count,COALESCE(sum(amount),0)::bigint AS total FROM payments
+        WHERE created >= $1 AND created < $2 GROUP BY 1`,[start,end])).rows;
+      const visitsByDay=new Map(visitDays.map(row=>[row.day,row.count]));
+      const paymentsByDay=new Map(paymentDays.map(row=>[row.day,row]));
+      const series=[];
+      for (let ms=Date.parse(from+'T00:00:00Z');ms<=Date.parse(to+'T00:00:00Z');ms+=86400000) {
+        const day=new Date(ms).toISOString().slice(0,10), paid=paymentsByDay.get(day);
+        series.push({day,visits:visitsByDay.get(day)||0,payments:paid?.count||0,paid_total:paid?.total||0});
+      }
+      return {counts,payments,methods,feedback,popular,comments,invoices,statuses,ratings,series};
     }
     const id=get?params.get('id'):data?.id;
     if (!idValid(id)) fail(400,'Kunjungan tidak valid.');
@@ -54,6 +76,7 @@ export function createSettlement(db) {
         if (!visit) fail(404,'Kunjungan tidak ditemukan.');
         if (visit.status!=='DONE') fail(409,'Feedback tersedia setelah pelayanan selesai.');
         if (await one(tx,'SELECT reservation FROM feedback WHERE reservation=$1',[id])) fail(409,'Feedback sudah diberikan.');
+        if (!(await one(tx,'SELECT reservation FROM payments WHERE reservation=$1',[id]))) fail(409,'Feedback tersedia setelah pembayaran dicatat lunas.');
         await tx.query('INSERT INTO feedback(reservation,account,rating,comment,created) VALUES($1,$2,$3,$4,$5)',[id,account.id,data.rating,comment,Date.now()]);
         await event(tx,account,id,'FEEDBACK'); return {saved:true};
       });
