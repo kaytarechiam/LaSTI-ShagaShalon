@@ -94,7 +94,7 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
     const rows=response.rows;
     const late=rows.filter(r=>(r.eta||r.started||0)>r.start+60000).length;
     const metrics=[['Sedang menunggu',rows.filter(r=>r.visit_status==='WAITING').length],
-      ['Perkiraan / mulai lewat satu menit dari jadwal',late]];
+      ['Mulai atau estimasi terlambat (>1 menit)',late]];
     return '<div id="management-report"></div><h2>Kondisi operasional</h2><div class="ops-metrics">'+metrics.map(([label,count])=>`<div><strong>${count}</strong><span>${label}</span></div>`).join('')+'</div>'+
       '<h2>Aktivitas periode ini</h2>'+cards(rows);
   }
@@ -186,13 +186,18 @@ export async function showOperations({account,app,api,escape:e,date,time,price})
     try {
       const r=await api('/settlement/report?'+new URLSearchParams({from:day,to}));
       if (!target.isConnected) return;
-      target.innerHTML='<h2>Laporan periode</h2><p>Reservasi dan kunjungan berdasarkan tanggal kunjungan; pembayaran dan feedback berdasarkan waktu pencatatan (WIB).</p>'+
-        '<div class="ops-metrics">'+[['Reservasi terkonfirmasi',r.counts.reservations],['Kunjungan',r.counts.visits],['Walk-in',r.counts.walkins],['Selesai',r.counts.finished],['Tagihan dibuat',r.invoices.count],['Tagihan belum lunas',r.invoices.unpaid_count],['Nilai belum lunas',price.format(r.invoices.unpaid_total)],['Pembayaran lunas',r.payments.count],['Total lunas',price.format(r.payments.total)],['Feedback',r.feedback.count],['Rata-rata rating',r.feedback.average?.toFixed(1)||'—']].map(([label,value])=>'<div><strong>'+e(value)+'</strong><span>'+e(label)+'</span></div>').join('')+'</div>'+
-        '<p>Tagihan dihitung berdasarkan waktu dibuat; status belum lunas adalah keadaan terkini. Nilai lunas berdasarkan waktu pencatatan pembayaran.</p>'+
-        '<p>Status reservasi: '+e(r.statuses.map(x=>(status[x.status]||x.status)+' '+x.count).join(' · ')||'Belum ada')+' · Distribusi rating: '+e(r.ratings.map(x=>x.rating+'/5: '+x.count).join(' · ')||'Belum ada')+'</p>'+
+      const metrics=(title,items)=>'<section class="ops-report-group"><h3>'+e(title)+'</h3><div class="ops-metrics">'+items.map(([label,value])=>'<div><strong>'+e(value)+'</strong><span>'+e(label)+'</span></div>').join('')+'</div></section>';
+      target.innerHTML='<h2>Laporan periode</h2>'+
+        metrics('Reservasi dan pelayanan',[['Reservasi terkonfirmasi',r.counts.reservations],['Kunjungan',r.counts.visits],['Walk-in',r.counts.walkins],['Pelayanan selesai',r.counts.finished]])+
+        metrics('Tagihan dan pembayaran',[['Tagihan dibuat',r.invoices.count],['Belum lunas',r.invoices.unpaid_count],['Nilai belum lunas',price.format(r.invoices.unpaid_total)],['Pembayaran lunas',r.payments.count],['Total pembayaran',price.format(r.payments.total)]])+
+        metrics('Ulasan pelanggan',[['Feedback',r.feedback.count],['Rata-rata rating',r.feedback.average?.toFixed(1)||'—']])+
         '<div class="ops-charts">'+(r.series.length>1?chart('Kunjungan per hari',r.series.map(x=>({label:x.day,value:x.visits})),String)+chart('Pembayaran lunas per hari',r.series.map(x=>({label:x.day,value:x.paid_total})),price.format.bind(price)):'')+chart('Layanan selesai terbanyak',r.popular.map(x=>({label:x.name,value:x.count})),String)+'</div>'+
-        '<p>Metode pembayaran: '+e(r.methods.map(x=>({CASH:'Tunai',TRANSFER:'Transfer',OTHER:'Lainnya'}[x.method]||x.method)+' '+price.format(x.total)).join(' · ')||'Belum ada')+'</p><p>Layanan selesai terbanyak: '+e(r.popular.map(x=>x.name+' ('+x.count+')').join(', ')||'Belum ada')+'</p>'+
-        '<h3>Feedback terbaru</h3>'+r.comments.map(f=>'<article class="ops-panel"><strong>'+e(f.rating)+'/5</strong><p>'+e(f.comment||'Tanpa komentar')+'</p>'+((f.followups||[]).map(x=>'<p>Tindak lanjut: '+e(x.note)+'</p>').join(''))+'<form data-followup="'+e(f.reservation)+'"><label>Tindak lanjut<textarea name="note" maxlength="1000" required></textarea></label><button type="submit">Simpan tindak lanjut</button>'+formAlert+'</form></article>').join('');
+        '<details class="ops-report-notes"><summary>Rincian dan cara membaca laporan</summary>'+
+        '<p>Reservasi dan kunjungan mengikuti tanggal kunjungan. Tagihan, pembayaran, dan feedback mengikuti waktu pencatatan (WIB). Tagihan belum lunas menunjukkan status saat ini.</p>'+
+        '<p><strong>Status reservasi:</strong> '+e(r.statuses.map(x=>(status[x.status]||x.status)+' '+x.count).join(' · ')||'Belum ada')+'</p>'+
+        '<p><strong>Distribusi rating:</strong> '+e(r.ratings.map(x=>x.rating+'/5: '+x.count).join(' · ')||'Belum ada')+'</p>'+
+        '<p><strong>Metode pembayaran:</strong> '+e(r.methods.map(x=>({CASH:'Tunai',TRANSFER:'Transfer',OTHER:'Lainnya'}[x.method]||x.method)+' '+price.format(x.total)).join(' · ')||'Belum ada')+'</p></details>'+
+        '<h3>Feedback terbaru</h3>'+(r.comments.length?'<div class="ops-feedback-list">'+r.comments.map(f=>'<article class="ops-panel ops-feedback"><strong aria-label="Rating '+e(f.rating)+' dari 5">'+e(f.rating)+' / 5</strong><p>'+e(f.comment||'Tanpa komentar')+'</p>'+((f.followups||[]).map(x=>'<p>Tindak lanjut: '+e(x.note)+'</p>').join(''))+'<details><summary>Catat tindak lanjut</summary><form data-followup="'+e(f.reservation)+'"><label>Tindak lanjut<textarea name="note" maxlength="1000" required></textarea></label><button type="submit">Simpan tindak lanjut</button>'+formAlert+'</form></details></article>').join('')+'</div>':'<p class="ops-empty">Belum ada feedback pada periode ini.</p>');
     } catch(error) { if (target.isConnected) target.textContent='Laporan tidak dapat dimuat: '+(error.message||'periksa koneksi'); }
   }
   async function settlementPanel(panel) {
