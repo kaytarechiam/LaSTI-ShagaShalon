@@ -871,6 +871,11 @@
   overflow-wrap: anywhere;
 }
 
+.m-metrics-5 .m-metric-value {
+  font-size: clamp(19px, 1.55vw, 24px);
+  overflow-wrap: break-word;
+}
+
 .m-metric-hint {
   font-size: 11.5px;
   color: var(--m-muted);
