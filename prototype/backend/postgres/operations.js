@@ -50,7 +50,8 @@ function clean(data, previous) {
   const capsters = read(data.capsters,previous.capsters,c => integer(c.start,0,23) && integer(c.end,c.start+1,24) &&
     integer(c.off,-1,6) && Array.isArray(c.skills) && c.skills.every(skill => services.some(s => s.id === skill)),
     c => ({start:c.start,end:c.end,off:c.off,skills:[...new Set(c.skills)]}));
-  return {services,capsters,rules:Object.fromEntries(['open','close','sunday','buffer','breakStart','breakEnd','early','late'].map(k => [k,rules[k]]))};
+  return {services,capsters,rules:Object.fromEntries(['open','close','sunday','buffer','breakStart','breakEnd','early','late'].map(k => [k,rules[k]])),
+    ...(Array.isArray(previous.blocks) && previous.blocks.length ? {blocks:previous.blocks} : {})};
 }
 
 export function createPostgresOperations(db) {
@@ -163,10 +164,69 @@ export function createPostgresOperations(db) {
         if (slot) planned.set(r.capster,{end:Math.max(prior?.end||0,slot.end)});
       }
       if (conflicts.length || !publish) return {conflicts,published:false};
-      await tx.query('UPDATE salon_config SET version=version+1,data=$1,updated=$2,actor=$3 WHERE id=1',[draft.data,Date.now(),account.id]);
+      const mergedData = JSON.stringify({
+        ...next,
+        ...(Array.isArray(current.blocks) && current.blocks.length ? { blocks: current.blocks } : {})
+      });
+      await tx.query('UPDATE salon_config SET version=version+1,data=$1,updated=$2,actor=$3 WHERE id=1',[mergedData,Date.now(),account.id]);
       await tx.query('DELETE FROM salon_drafts WHERE account=$1',[account.id]); await record(tx,account,'settings','PUBLISH'); return {conflicts,published:true};
     });
   }
+  const VALID_BLOCK_KINDS = new Set(['BREAK', 'TRAINING', 'OFF', 'BUSY']);
+
+  async function addBlock(account, data) {
+    return db.transaction(async tx => {
+      const current = await getConfig(tx);
+      const mineCap = account.role === 'capster' ? await actorCapster(tx, account) : null;
+      if (account.role === 'capster' && !mineCap) fail(403,'Belum ada capster yang terhubung.');
+      if (account.role === 'capster' && data.capster && data.capster !== mineCap) fail(403,'Hanya boleh menambah blok waktu untuk jadwalmu sendiri.');
+      const capsterId = account.role === 'capster' ? mineCap : (typeof data.capster === 'string' ? data.capster : '');
+      if (!current.capsters.some(c => c.id === capsterId && c.active !== false)) fail(400,'Pilih capster aktif.');
+      if (!validDay(data.day) || data.day < today()) fail(400,'Pilih tanggal hari ini atau mendatang.');
+      const startMin = data.startMin, endMin = data.endMin;
+      if (!Number.isInteger(startMin) || !Number.isInteger(endMin) || startMin < 0 || endMin > 1440 || endMin - startMin < 15) {
+        fail(400,'Durasi blok waktu minimal 15 menit pada jam yang valid.');
+      }
+      const kind = typeof data.kind === 'string' && VALID_BLOCK_KINDS.has(data.kind) ? data.kind : '';
+      const label = typeof data.label === 'string' ? data.label.trim() : '';
+      if (!kind || label.length < 2 || label.length > 80) fail(400,'Isi jenis dan keterangan blok waktu (2–80 karakter).');
+      const dayBase = Date.parse(data.day + 'T00:00:00+07:00');
+      const start = dayBase + startMin * 60000;
+      const end = dayBase + endMin * 60000;
+      const conflict = await one(tx, 'SELECT 1 FROM allocations WHERE capster=$1 AND start<$2 AND "end">$3 LIMIT 1', [capsterId, end, start]);
+      if (conflict) fail(409,'Rentang waktu bertabrakan dengan reservasi terkonfirmasi.');
+      const existingBlocks = Array.isArray(current.blocks) ? current.blocks.filter(b => b.end > Date.now() - 90 * 86400000) : [];
+      if (existingBlocks.some(b => b.capster === capsterId && b.day === data.day && start < b.end && end > b.start)) {
+        fail(409,'Sudah ada blok waktu lain pada jam tersebut.');
+      }
+      const { version: _v, ...restConfig } = current;
+      const block = { id: randomBytes(16).toString('hex'), capster: capsterId, day: data.day, start, end, kind, label, createdBy: account.id, createdAt: Date.now() };
+      const blocks = [...existingBlocks, block];
+      await tx.query('UPDATE salon_config SET data=$1,updated=$2,actor=$3 WHERE id=1', [JSON.stringify({ ...restConfig, blocks }), Date.now(), account.id]);
+      await record(tx, account, block.id, 'BLOCK_ADD');
+      return { block, blocks };
+    });
+  }
+
+  async function removeBlock(account, data) {
+    return db.transaction(async tx => {
+      const blockId = typeof data.id === 'string' ? data.id : '';
+      if (!blockId) fail(400,'ID blok waktu tidak valid.');
+      const current = await getConfig(tx);
+      const existingBlocks = Array.isArray(current.blocks) ? current.blocks : [];
+      const found = existingBlocks.find(b => b.id === blockId);
+      if (!found) fail(404,'Blok waktu tidak ditemukan.');
+      if (account.role === 'capster' && found.capster !== await actorCapster(tx, account)) {
+        fail(403,'Hanya boleh menghapus blok waktu milikmu sendiri.');
+      }
+      const { version: _v, ...restConfig } = current;
+      const blocks = existingBlocks.filter(b => b.id !== blockId);
+      await tx.query('UPDATE salon_config SET data=$1,updated=$2,actor=$3 WHERE id=1', [JSON.stringify({ ...restConfig, blocks }), Date.now(), account.id]);
+      await record(tx, account, blockId, 'BLOCK_REMOVE');
+      return { removed: blockId, blocks };
+    });
+  }
+
   async function route(account,path,params,data=null) {
     const {role}=account;
     if (!['staff','capster','manager'].includes(role)) fail(403,'Halaman khusus tim salon.');
@@ -174,6 +234,8 @@ export function createPostgresOperations(db) {
     if (!data) fail(404,'Halaman tidak ditemukan.');
     if (role==='staff' && path==='/api/ops/check-in') return checkIn(account,data.id??'');
     if (role==='staff' && path==='/api/ops/walk-in') return walkIn(account,data);
+    if (path==='/api/ops/block') return addBlock(account,data);
+    if (path==='/api/ops/block/remove') return removeBlock(account,data);
     if (role==='capster' && path==='/api/ops/ready') {
       if (typeof data.ready!=='boolean') fail(400,'Pilih kesiapan capster.');
       return db.transaction(async tx=>{

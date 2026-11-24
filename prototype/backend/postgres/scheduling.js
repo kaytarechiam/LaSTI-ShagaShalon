@@ -57,6 +57,11 @@ export async function availableSlots(db, service, capster, day, { except = '', s
   const recent = await queryRow(db, `SELECT v.started,v.ended FROM visits v JOIN reservations r ON r.id=v.reservation
     WHERE r.capster=$1 AND v.status='DONE' AND r.id<>$2 ORDER BY v.ended DESC LIMIT 1`, [capster.id, except]);
   if (recent) ranges.push({ start: recent.started, end: recent.ended + settings.rules.buffer * 60000 });
+  for (const block of (settings.blocks || [])) {
+    if (block.capster === capster.id && block.day === day) {
+      ranges.push({ start: block.start, end: block.end });
+    }
+  }
   return candidates(service, capster, day, now, settings.rules)
     .filter(slot => ranges.every(range => range.start >= slot.end || range.end <= slot.start));
 }

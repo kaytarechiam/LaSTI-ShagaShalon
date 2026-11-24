@@ -76,6 +76,20 @@ export interface Reservation {
   payment_status?: 'NOT_READY' | 'READY' | 'UNPAID' | 'PAID';
 }
 
+export type BlockKind = 'BREAK' | 'TRAINING' | 'OFF' | 'BUSY';
+
+export interface TimeBlock {
+  id: string;
+  capster: string;
+  day: string;
+  start: number;
+  end: number;
+  kind: BlockKind;
+  label: string;
+  createdBy?: number;
+  createdAt?: number;
+}
+
 export interface OpsConfig {
   version: number;
   services: Array<Service & { active: boolean }>;
@@ -89,6 +103,7 @@ export interface OpsConfig {
     off: number;
   }>;
   rules: Rules;
+  blocks?: TimeBlock[];
 }
 
 export interface OpsBoardResponse {
@@ -260,3 +275,42 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   TRANSFER: 'Transfer',
   OTHER: 'Lainnya',
 };
+
+export const BLOCK_KIND_LABELS: Record<BlockKind, string> = {
+  BREAK: 'Istirahat / Makan Siang',
+  TRAINING: 'Pelatihan & Briefing',
+  OFF: 'Hari Libur / Cuti Khusus',
+  BUSY: 'Waktu Terpesan Internal',
+};
+
+export function wibMinutesOfDay(ms: number): number {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Jakarta',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+      .formatToParts(ms)
+      .map((p) => [p.type, Number(p.value)])
+  );
+  const hh = (parts.hour || 0) === 24 ? 0 : parts.hour || 0;
+  return hh * 60 + (parts.minute || 0);
+}
+
+export function formatWeekdayShortId(day: string): string {
+  return new Intl.DateTimeFormat('id-ID', {
+    weekday: 'short',
+    timeZone: 'UTC',
+  }).format(new Date(day + 'T00:00:00Z'));
+}
+
+export function formatWeekdayDayId(day: string): string {
+  return new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(day + 'T00:00:00Z'));
+}

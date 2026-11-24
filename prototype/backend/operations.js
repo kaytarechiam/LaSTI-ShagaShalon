@@ -91,6 +91,11 @@ export function createOperations(db, {ApiError,contact}) {
     if (active) ranges.push({start:active.started,end:Math.max(now,active.estimate)+settings.rules.buffer*60000});
     const recent = db.prepare(query+" WHERE r.capster=? AND v.status='DONE' AND r.id<>? ORDER BY v.ended DESC LIMIT 1").get(capster?.id,except);
     if (recent) ranges.push({start:recent.started,end:recent.ended+settings.rules.buffer*60000});
+    for (const block of (settings.blocks || [])) {
+      if (block.capster === capster?.id && block.day === day) {
+        ranges.push({start:block.start,end:block.end});
+      }
+    }
     return candidates(service,capster,day,now,settings.rules)
       .filter(slot=>ranges.every(range=>range.start>=slot.end || range.end<=slot.start));
   }
@@ -202,7 +207,8 @@ export function createOperations(db, {ApiError,contact}) {
     const nextCapsters=read(data.capsters,previous.capsters,c=>integer(c.start,0,23)&&integer(c.end,c.start+1,24)&&
       integer(c.off,-1,6)&&Array.isArray(c.skills)&&c.skills.every(skill=>nextServices.some(s=>s.id===skill)),
       c=>({start:c.start,end:c.end,off:c.off,skills:[...new Set(c.skills)]}));
-    return {services:nextServices,capsters:nextCapsters,rules:Object.fromEntries(Object.keys(initial.rules).map(k=>[k,rules[k]]))};
+    return {services:nextServices,capsters:nextCapsters,rules:Object.fromEntries(Object.keys(initial.rules).map(k=>[k,rules[k]])),
+      ...(Array.isArray(previous.blocks) && previous.blocks.length ? {blocks:previous.blocks} : {})};
   }
   function draftOutcome(account,publish) {
     return transaction(()=>{
@@ -222,8 +228,12 @@ export function createOperations(db, {ApiError,contact}) {
         if (slot) planned.set(r.capster,{end:Math.max(prior?.end||0,slot.end)});
       }
       if (conflicts.length || !publish) return {conflicts,published:false};
+      const mergedData = JSON.stringify({
+        ...next,
+        ...(Array.isArray(current.blocks) && current.blocks.length ? {blocks:current.blocks} : {})
+      });
       db.prepare('UPDATE salon_config SET version=version+1,data=?,updated=?,actor=? WHERE id=1')
-        .run(draft.data,Date.now(),account.id);
+        .run(mergedData,Date.now(),account.id);
       db.prepare('DELETE FROM salon_drafts WHERE account=?').run(account.id);
       record(account,'settings','PUBLISH');
       return {conflicts,published:true};
@@ -251,6 +261,61 @@ export function createOperations(db, {ApiError,contact}) {
       draft:draft?{version:draft.version,...JSON.parse(draft.data)}:null};
   }
 
+  const VALID_BLOCK_KINDS = new Set(['BREAK', 'TRAINING', 'OFF', 'BUSY']);
+
+  function addBlock(account, data) {
+    return transaction(()=>{
+      const rowCfg = db.prepare('SELECT version,data FROM salon_config WHERE id=1').get();
+      const current = JSON.parse(rowCfg.data);
+      const mineCap = account.role === 'capster' ? actorCapster(account) : null;
+      if (account.role === 'capster' && !mineCap) fail(403,'Belum ada capster yang terhubung.');
+      if (account.role === 'capster' && data.capster && data.capster !== mineCap) fail(403,'Hanya boleh menambah blok waktu untuk jadwalmu sendiri.');
+      const capsterId = account.role === 'capster' ? mineCap : (typeof data.capster === 'string' ? data.capster : '');
+      if (!current.capsters.some(c => c.id === capsterId && c.active !== false)) fail(400,'Pilih capster aktif.');
+      if (!validDay(data.day) || data.day < today()) fail(400,'Pilih tanggal hari ini atau mendatang.');
+      const startMin = data.startMin, endMin = data.endMin;
+      if (!Number.isInteger(startMin) || !Number.isInteger(endMin) || startMin < 0 || endMin > 1440 || endMin - startMin < 15) {
+        fail(400,'Durasi blok waktu minimal 15 menit pada jam yang valid.');
+      }
+      const kind = typeof data.kind === 'string' && VALID_BLOCK_KINDS.has(data.kind) ? data.kind : '';
+      const label = typeof data.label === 'string' ? data.label.trim() : '';
+      if (!kind || label.length < 2 || label.length > 80) fail(400,'Isi jenis dan keterangan blok waktu (2–80 karakter).');
+      const dayBase = Date.parse(data.day + 'T00:00:00+07:00');
+      const start = dayBase + startMin * 60000;
+      const end = dayBase + endMin * 60000;
+      const conflict = db.prepare('SELECT 1 FROM allocations WHERE capster=? AND start<? AND end>? LIMIT 1').get(capsterId, end, start);
+      if (conflict) fail(409,'Rentang waktu bertabrakan dengan reservasi terkonfirmasi.');
+      const existingBlocks = Array.isArray(current.blocks) ? current.blocks.filter(b => b.end > Date.now() - 90 * 86400000) : [];
+      if (existingBlocks.some(b => b.capster === capsterId && b.day === data.day && start < b.end && end > b.start)) {
+        fail(409,'Sudah ada blok waktu lain pada jam tersebut.');
+      }
+      const block = { id: id(), capster: capsterId, day: data.day, start, end, kind, label, createdBy: account.id, createdAt: Date.now() };
+      const blocks = [...existingBlocks, block];
+      db.prepare('UPDATE salon_config SET data=?,updated=?,actor=? WHERE id=1').run(JSON.stringify({ ...current, blocks }), Date.now(), account.id);
+      record(account, block.id, 'BLOCK_ADD');
+      return { block, blocks };
+    });
+  }
+
+  function removeBlock(account, data) {
+    return transaction(()=>{
+      const blockId = typeof data.id === 'string' ? data.id : '';
+      if (!blockId) fail(400,'ID blok waktu tidak valid.');
+      const rowCfg = db.prepare('SELECT version,data FROM salon_config WHERE id=1').get();
+      const current = JSON.parse(rowCfg.data);
+      const existingBlocks = Array.isArray(current.blocks) ? current.blocks : [];
+      const found = existingBlocks.find(b => b.id === blockId);
+      if (!found) fail(404,'Blok waktu tidak ditemukan.');
+      if (account.role === 'capster' && found.capster !== actorCapster(account)) {
+        fail(403,'Hanya boleh menghapus blok waktu milikmu sendiri.');
+      }
+      const blocks = existingBlocks.filter(b => b.id !== blockId);
+      db.prepare('UPDATE salon_config SET data=?,updated=?,actor=? WHERE id=1').run(JSON.stringify({ ...current, blocks }), Date.now(), account.id);
+      record(account, blockId, 'BLOCK_REMOVE');
+      return { removed: blockId, blocks };
+    });
+  }
+
   function route(account,path,params,data=null) {
     const {role}=account;
     if (!['staff','capster','manager'].includes(role)) fail(403,'Halaman khusus tim salon.');
@@ -258,6 +323,8 @@ export function createOperations(db, {ApiError,contact}) {
     if (!data) fail(404,'Halaman tidak ditemukan.');
     if (role==='staff' && path==='/api/ops/check-in') return checkIn(account,data.id??'');
     if (role==='staff' && path==='/api/ops/walk-in') return walkIn(account,data);
+    if (path==='/api/ops/block') return addBlock(account,data);
+    if (path==='/api/ops/block/remove') return removeBlock(account,data);
     if (role==='capster' && path==='/api/ops/ready') {
       if (typeof data.ready!=='boolean') fail(400,'Pilih kesiapan capster.');
       const capster=actorCapster(account);

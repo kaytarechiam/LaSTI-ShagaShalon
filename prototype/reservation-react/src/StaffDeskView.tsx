@@ -27,19 +27,39 @@ import {
   type Reservation,
   type SettlementDetailResponse,
   type Slot,
+  type TimeBlock,
 } from './api';
 import { HorizontalMetricChart, HourlyScheduleChart } from './components/Charts';
+import {
+  AppointmentQuickSheet,
+  BlockDetailModal,
+  BlockTimeModal,
+  CalendarToolbar,
+  DayResourceCalendar,
+  WeekTeamMatrix,
+} from './components/TeamCalendar';
 import { EmptyState, MetricCard, Modal, Notice, PageHeader, StatusBadge } from './components/ui';
 
 type DeskTab = 'ALL' | 'QUEUE' | 'RESERVATIONS' | 'SETTLEMENT';
 
 export function StaffDeskView() {
+  const [workspaceMode, setWorkspaceMode] = useState<'desk' | 'calendar'>(() =>
+    location.hash === '#kalender' ? 'calendar' : 'desk'
+  );
+  const [calViewMode, setCalViewMode] = useState<'DAY' | 'WEEK'>('DAY');
   const [currentDay, setCurrentDay] = useState(jakartaToday);
   const [day, setDay] = useState(currentDay);
   const [statusFilter, setStatusFilter] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<DeskTab>(() => (location.hash === '#antrean' ? 'QUEUE' : 'ALL'));
+
+  const [calAppointment, setCalAppointment] = useState<Reservation | null>(null);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [blockCapster, setBlockCapster] = useState('');
+  const [blockDay, setBlockDay] = useState(currentDay);
+  const [blockStartMin, setBlockStartMin] = useState<number | undefined>(undefined);
+  const [blockTarget, setBlockTarget] = useState<TimeBlock | null>(null);
 
   const [board, setBoard] = useState<OpsBoardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,15 +96,22 @@ export function StaffDeskView() {
   const autoAdvancedRef = useRef(false);
   const skipNextFetchRef = useRef(false);
 
-  const loadBoard = async (targetDay = day, silent = false) => {
+  const loadBoard = async (
+    targetDay = day,
+    silent = false,
+    mode = workspaceMode,
+    calView = calViewMode
+  ) => {
     if (!silent) setRefreshing(true);
+    const toDay = mode === 'calendar' && calView === 'WEEK' ? addDays(targetDay, 6) : targetDay;
     try {
-      const data = await api<OpsBoardResponse>('/ops/board?' + new URLSearchParams({ day: targetDay, to: targetDay }));
+      const data = await api<OpsBoardResponse>('/ops/board?' + new URLSearchParams({ day: targetDay, to: toDay }));
       if (!autoAdvancedRef.current) {
         autoAdvancedRef.current = true;
         if (targetDay === currentDay && data.rows.length === 0) {
           const nextDay = addDays(currentDay, 1);
-          const nextData = await api<OpsBoardResponse>('/ops/board?' + new URLSearchParams({ day: nextDay, to: nextDay }));
+          const nextTo = mode === 'calendar' && calView === 'WEEK' ? addDays(nextDay, 6) : nextDay;
+          const nextData = await api<OpsBoardResponse>('/ops/board?' + new URLSearchParams({ day: nextDay, to: nextTo }));
           if (nextData.rows.length > 0) {
             skipNextFetchRef.current = true;
             setDay(nextDay);
@@ -112,12 +139,17 @@ export function StaffDeskView() {
       skipNextFetchRef.current = false;
       return;
     }
-    void loadBoard(day);
-  }, [day]);
+    void loadBoard(day, false, workspaceMode, calViewMode);
+  }, [day, workspaceMode, calViewMode]);
 
   useEffect(() => {
     const syncHash = () => {
-      if (location.hash === '#antrean') setTab('QUEUE');
+      if (location.hash === '#kalender') {
+        setWorkspaceMode('calendar');
+      } else {
+        setWorkspaceMode('desk');
+        if (location.hash === '#antrean') setTab('QUEUE');
+      }
     };
     window.addEventListener('hashchange', syncHash);
     return () => window.removeEventListener('hashchange', syncHash);
@@ -396,13 +428,23 @@ export function StaffDeskView() {
   return (
     <>
       <PageHeader
-        eyebrow="MEJA RESEPSIONIS & KASIR"
+        eyebrow={workspaceMode === 'calendar' ? 'KALENDER OPERASIONAL SALON' : 'MEJA RESEPSIONIS & KASIR'}
         title={
-          <>
-            Reservasi &amp; <em>kedatangan.</em>
-          </>
+          workspaceMode === 'calendar' ? (
+            <>
+              Kalender <em>tim salon.</em>
+            </>
+          ) : (
+            <>
+              Reservasi &amp; <em>kedatangan.</em>
+            </>
+          )
         }
-        description="Kelola check-in reservasi, penerimaan walk-in, antrean harian, dan pencatatan tagihan."
+        description={
+          workspaceMode === 'calendar'
+            ? 'Pantau slot terisi dan jam kosong lintas capster secara real-time, kelola blok waktu istirahat, dan terima pelanggan.'
+            : 'Kelola check-in reservasi, penerimaan walk-in, antrean harian, dan pencatatan tagihan.'
+        }
         actions={
           <div className="m-header-cta-group">
             <button
@@ -422,6 +464,66 @@ export function StaffDeskView() {
         }
       />
 
+      {workspaceMode === 'calendar' ? (
+        <>
+          <CalendarToolbar
+            day={day}
+            todayDay={currentDay}
+            viewMode={calViewMode}
+            onChangeDay={setDay}
+            onChangeViewMode={setCalViewMode}
+            onAddBlock={() => {
+              setBlockCapster(board?.settings.capsters.find((c) => c.active)?.id || 'a');
+              setBlockDay(day);
+              setBlockStartMin(undefined);
+              setBlockOpen(true);
+            }}
+          />
+          <Notice text={notice} tone={noticeTone} />
+          {loading || !board ? (
+            <div className="m-loading-box" role="status">
+              Memuat kalender tim salon…
+            </div>
+          ) : calViewMode === 'DAY' ? (
+            <DayResourceCalendar
+              day={day}
+              todayDay={currentDay}
+              capsters={board.settings.capsters.filter((c) => c.active)}
+              rows={allRows}
+              blocks={board.settings.blocks || []}
+              rules={board.settings.rules}
+              onSelectAppointment={setCalAppointment}
+              onAddBlock={(capId, sMin) => {
+                setBlockCapster(capId);
+                setBlockDay(day);
+                setBlockStartMin(sMin);
+                setBlockOpen(true);
+              }}
+              onSelectBlock={setBlockTarget}
+            />
+          ) : (
+            <WeekTeamMatrix
+              startDay={day}
+              todayDay={currentDay}
+              capsters={board.settings.capsters.filter((c) => c.active)}
+              rows={allRows}
+              blocks={board.settings.blocks || []}
+              rules={board.settings.rules}
+              onSelectDay={(selectedDay) => {
+                setDay(selectedDay);
+                setCalViewMode('DAY');
+              }}
+              onAddBlock={(capId, targetDay) => {
+                setBlockCapster(capId);
+                setBlockDay(targetDay);
+                setBlockStartMin(undefined);
+                setBlockOpen(true);
+              }}
+            />
+          )}
+        </>
+      ) : (
+        <>
       <div className="m-metrics-grid m-metrics-4">
         <MetricCard
           label="Total jadwal tanggal ini"
@@ -579,6 +681,66 @@ export function StaffDeskView() {
           {visibleRows.map(renderCard)}
         </div>
       )}
+        </>
+      )}
+
+      <AppointmentQuickSheet
+        appointment={calAppointment}
+        capsters={board?.settings.capsters || []}
+        onClose={() => setCalAppointment(null)}
+      >
+        {calAppointment && (
+          <div className="m-actions">
+            {calAppointment.day === currentDay &&
+              calAppointment.status === 'CONFIRMED' &&
+              !calAppointment.visit_status && (
+                <button
+                  type="button"
+                  className="m-primary"
+                  disabled={busyId === calAppointment.id}
+                  onClick={() => {
+                    void handleCheckIn(calAppointment);
+                    setCalAppointment(null);
+                  }}
+                >
+                  <UserCheck size={16} /> Check-in sekarang
+                </button>
+              )}
+            {calAppointment.visit_status === 'DONE' && (
+              <button
+                type="button"
+                className="m-secondary"
+                onClick={() => {
+                  const target = calAppointment;
+                  setCalAppointment(null);
+                  void openSettlement(target);
+                }}
+              >
+                <CreditCard size={16} /> Tagihan &amp; pembayaran
+              </button>
+            )}
+          </div>
+        )}
+      </AppointmentQuickSheet>
+
+      <BlockTimeModal
+        open={blockOpen}
+        onOpenChange={setBlockOpen}
+        capsters={board?.settings.capsters.filter((c) => c.active) || []}
+        initialCapster={blockCapster}
+        initialDay={blockDay}
+        initialStartMin={blockStartMin}
+        minDay={currentDay}
+        onCreated={() => loadBoard(day, true, workspaceMode, calViewMode)}
+      />
+
+      <BlockDetailModal
+        block={blockTarget}
+        capsters={board?.settings.capsters || []}
+        canDelete={true}
+        onClose={() => setBlockTarget(null)}
+        onDeleted={() => loadBoard(day, true, workspaceMode, calViewMode)}
+      />
 
       <Modal
         open={walkOpen}

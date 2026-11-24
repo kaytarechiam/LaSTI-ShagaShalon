@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
+  CalendarDays,
   CheckCircle2,
+  ClipboardList,
   Clock3,
   Play,
   RefreshCw,
   Scissors,
   SlidersHorizontal,
   Sparkles,
+  Timer,
 } from 'lucide-react';
 import {
   addDays,
@@ -19,11 +22,22 @@ import {
   time,
   type OpsBoardResponse,
   type Reservation,
+  type TimeBlock,
 } from './api';
 import { HourlyScheduleChart } from './components/Charts';
+import {
+  AppointmentQuickSheet,
+  BlockDetailModal,
+  BlockTimeModal,
+  CalendarToolbar,
+  DayResourceCalendar,
+} from './components/TeamCalendar';
 import { EmptyState, MetricCard, Modal, Notice, PageHeader, StatusBadge } from './components/ui';
 
 export function CapsterView() {
+  const [tab, setTab] = useState<'list' | 'calendar'>(() =>
+    location.hash === '#kalender' ? 'calendar' : 'list'
+  );
   const [currentDay, setCurrentDay] = useState(jakartaToday);
   const [day, setDay] = useState(currentDay);
   const [board, setBoard] = useState<OpsBoardResponse | null>(null);
@@ -33,6 +47,26 @@ export function CapsterView() {
   const [notice, setNotice] = useState('');
   const [noticeTone, setNoticeTone] = useState<'error' | 'success'>('success');
   const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const [calTarget, setCalTarget] = useState<Reservation | null>(null);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [blockStartMin, setBlockStartMin] = useState<number | undefined>(undefined);
+  const [blockTarget, setBlockTarget] = useState<TimeBlock | null>(null);
+
+  useEffect(() => {
+    const syncHash = () => setTab(location.hash === '#kalender' ? 'calendar' : 'list');
+    window.addEventListener('hashchange', syncHash);
+    return () => window.removeEventListener('hashchange', syncHash);
+  }, []);
+
+  const switchTab = (next: 'list' | 'calendar') => {
+    setTab(next);
+    const nextUrl = '/capster' + (next === 'calendar' ? '#kalender' : '');
+    if (location.pathname + location.hash !== nextUrl) {
+      history.replaceState(null, '', nextUrl);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    }
+  };
 
   const [minutesInput, setMinutesInput] = useState<Record<string, string>>({});
 
@@ -151,6 +185,25 @@ export function CapsterView() {
     }
   };
 
+  const addExtraMinutes = async (row: Reservation, extraMins: number) => {
+    const remaining = row.estimate ? Math.max(1, Math.ceil((row.estimate - Date.now()) / 60000)) : 0;
+    const nextTotal = Math.min(480, remaining + extraMins);
+    setBusyKey(`estimate:${row.id}`);
+    setNotice('');
+    try {
+      await api('/ops/estimate', { id: row.id, minutes: nextTotal });
+      setNoticeTone('success');
+      setNotice(`Waktu ekstra +${extraMins} menit diterapkan (perkiraan sisa ${nextTotal} menit).`);
+      await loadBoard(day, true);
+      setCalTarget(null);
+    } catch (err) {
+      setNoticeTone('error');
+      setNotice(errorMessage(err));
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
   const openAdjust = (row: Reservation) => {
     setAdjustTarget(row);
     setAdjustService(row.service || row.items[0]?.id || '');
@@ -189,26 +242,59 @@ export function CapsterView() {
   const activeSession = rows.find((r) => r.day === currentDay && r.visit_status === 'ACTIVE');
   const waitingRows = rows.filter((r) => r.visit_status === 'WAITING');
   const doneRows = rows.filter((r) => r.visit_status === 'DONE');
+  const latestCalAppointment = calTarget ? rows.find((r) => r.id === calTarget.id) || calTarget : null;
 
   return (
     <>
       <PageHeader
         eyebrow="RUANG KERJA CAPSTER"
         title={
-          <>
-            Jadwal <em>pelayanan.</em>
-          </>
+          tab === 'calendar' ? (
+            <>
+              Kalender <em>saya.</em>
+            </>
+          ) : (
+            <>
+              Jadwal <em>pelayanan.</em>
+            </>
+          )
         }
-        description="Lihat giliran pelangganmu, atur kesiapan layanan, perbarui sisa waktu, dan catat penyelesaian sesi."
+        description={
+          tab === 'calendar'
+            ? 'Lihat jadwal shift dan siapa yang dilayani per jam hari ini, kelola waktu ekstra layanan, atau pasang blok istirahat pribadi.'
+            : 'Lihat giliran pelangganmu, atur kesiapan layanan, perbarui sisa waktu, dan catat penyelesaian sesi.'
+        }
         actions={
-          <button
-            type="button"
-            className={board?.ready ? 'm-secondary' : 'm-primary'}
-            disabled={!board || busyKey === 'ready'}
-            onClick={() => void toggleReady()}
-          >
-            {board?.ready ? 'Tandai belum siap' : 'Tandai siap melayani'}
-          </button>
+          <div className="m-header-cta-group">
+            <div className="m-segmented" role="tablist" aria-label="Tampilan ruang kerja capster">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'list'}
+                className={`m-seg-btn ${tab === 'list' ? 'is-active' : ''}`}
+                onClick={() => switchTab('list')}
+              >
+                <ClipboardList size={15} /> Daftar
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'calendar'}
+                className={`m-seg-btn ${tab === 'calendar' ? 'is-active' : ''}`}
+                onClick={() => switchTab('calendar')}
+              >
+                <CalendarDays size={15} /> Kalender Saya
+              </button>
+            </div>
+            <button
+              type="button"
+              className={board?.ready ? 'm-secondary' : 'm-primary'}
+              disabled={!board || busyKey === 'ready'}
+              onClick={() => void toggleReady()}
+            >
+              {board?.ready ? 'Tandai belum siap' : 'Tandai siap melayani'}
+            </button>
+          </div>
         }
       />
 
@@ -234,7 +320,47 @@ export function CapsterView() {
         </section>
       )}
 
-      <div className="m-metrics-grid m-metrics-3">
+      {tab === 'calendar' ? (
+        <>
+          <CalendarToolbar
+            day={day}
+            todayDay={currentDay}
+            onChangeDay={setDay}
+            onAddBlock={
+              board?.mine
+                ? () => {
+                    setBlockStartMin(undefined);
+                    setBlockOpen(true);
+                  }
+                : undefined
+            }
+          />
+          <Notice text={notice} tone={noticeTone} />
+          {loading || !board ? (
+            <div className="m-loading-box" role="status">
+              Memuat kalender capster…
+            </div>
+          ) : (
+            <DayResourceCalendar
+              day={day}
+              todayDay={currentDay}
+              capsters={capsterProfile ? [capsterProfile] : []}
+              rows={rows}
+              blocks={board.settings.blocks || []}
+              rules={board.settings.rules}
+              singleMode={true}
+              onSelectAppointment={setCalTarget}
+              onAddBlock={(_capId, sMin) => {
+                setBlockStartMin(sMin);
+                setBlockOpen(true);
+              }}
+              onSelectBlock={setBlockTarget}
+            />
+          )}
+        </>
+      ) : (
+        <>
+          <div className="m-metrics-grid m-metrics-3">
         <MetricCard
           label="Menunggu giliran"
           value={waitingRows.length}
@@ -469,6 +595,100 @@ export function CapsterView() {
           })}
         </div>
       )}
+        </>
+      )}
+
+      <AppointmentQuickSheet
+        appointment={latestCalAppointment}
+        capsters={board?.settings.capsters || []}
+        onClose={() => setCalTarget(null)}
+      >
+        {latestCalAppointment && (
+          <div className="m-stack-sm">
+            {latestCalAppointment.day === currentDay && latestCalAppointment.visit_status === 'WAITING' && (
+              <div className="m-actions">
+                <button
+                  type="button"
+                  className="m-primary"
+                  disabled={busyKey === `start:${latestCalAppointment.id}`}
+                  onClick={() => {
+                    void sessionAction('start', latestCalAppointment);
+                    setCalTarget(null);
+                  }}
+                >
+                  <Play size={15} /> Mulai sesi
+                </button>
+                {latestCalAppointment.items.length === 1 && (
+                  <button
+                    type="button"
+                    className="m-secondary"
+                    onClick={() => {
+                      const target = latestCalAppointment;
+                      setCalTarget(null);
+                      openAdjust(target);
+                    }}
+                  >
+                    <SlidersHorizontal size={15} /> Sesuaikan layanan
+                  </button>
+                )}
+              </div>
+            )}
+            {latestCalAppointment.day === currentDay && latestCalAppointment.visit_status === 'ACTIVE' && (
+              <div className="m-stack-sm">
+                <div className="m-preset-row">
+                  <span>
+                    <Timer size={14} aria-hidden="true" /> Waktu ekstra layanan:
+                  </span>
+                  {[10, 15, 30].map((extra) => (
+                    <button
+                      key={extra}
+                      type="button"
+                      className="m-chip"
+                      disabled={busyKey === `estimate:${latestCalAppointment.id}`}
+                      onClick={() => void addExtraMinutes(latestCalAppointment, extra)}
+                    >
+                      +{extra} mnt
+                    </button>
+                  ))}
+                </div>
+                <div className="m-actions">
+                  <button
+                    type="button"
+                    className="m-primary"
+                    disabled={busyKey === `finish:${latestCalAppointment.id}`}
+                    onClick={() => {
+                      void sessionAction('finish', latestCalAppointment);
+                      setCalTarget(null);
+                    }}
+                  >
+                    <CheckCircle2 size={15} /> Selesaikan sesi
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </AppointmentQuickSheet>
+
+      <BlockTimeModal
+        open={blockOpen}
+        onOpenChange={setBlockOpen}
+        capsters={capsterProfile ? [capsterProfile] : board?.settings.capsters || []}
+        initialCapster={board?.mine || ''}
+        initialDay={day}
+        initialStartMin={blockStartMin}
+        lockCapster={true}
+        minDay={currentDay}
+        onCreated={() => loadBoard(day, true)}
+      />
+
+      <BlockDetailModal
+        block={blockTarget}
+        capsters={board?.settings.capsters || []}
+        canDelete={true}
+        onClose={() => setBlockTarget(null)}
+        onDeleted={() => loadBoard(day, true)}
+      />
 
       <Modal
         open={Boolean(adjustTarget)}

@@ -3,6 +3,7 @@ import {
   ArrowRight,
   BarChart3,
   CalendarDays,
+  CalendarRange,
   CheckCircle2,
   ClipboardList,
   ExternalLink,
@@ -215,13 +216,19 @@ function getNavItems(account: Account): NavItem[] {
           label: 'Meja Resepsionis',
           href: '/resepsionis',
           icon: <ClipboardList size={18} />,
-          match: (p, h) => p === '/resepsionis' && h !== '#antrean',
+          match: (p, h) => p === '/resepsionis' && h !== '#antrean' && h !== '#kalender',
         },
         {
           label: 'Antrean Harian',
           href: '/resepsionis#antrean',
           icon: <Users size={18} />,
           match: (p, h) => p === '/resepsionis' && h === '#antrean',
+        },
+        {
+          label: 'Kalender Salon',
+          href: '/resepsionis#kalender',
+          icon: <CalendarRange size={18} />,
+          match: (p, h) => p === '/resepsionis' && h === '#kalender',
         },
         {
           label: 'Buat Reservasi',
@@ -241,8 +248,14 @@ function getNavItems(account: Account): NavItem[] {
         {
           label: 'Jadwal Pelayanan',
           href: '/capster',
+          icon: <ClipboardList size={18} />,
+          match: (p, h) => p === '/capster' && h !== '#kalender',
+        },
+        {
+          label: 'Kalender Saya',
+          href: '/capster#kalender',
           icon: <CalendarDays size={18} />,
-          match: (p) => p === '/capster',
+          match: (p, h) => p === '/capster' && h === '#kalender',
         },
         {
           label: 'Profil',
@@ -257,7 +270,13 @@ function getNavItems(account: Account): NavItem[] {
           label: 'Ringkasan & Laporan',
           href: '/manajemen',
           icon: <BarChart3 size={18} />,
-          match: (p, h) => p === '/manajemen' && h !== '#pengaturan',
+          match: (p, h) => p === '/manajemen' && h !== '#pengaturan' && h !== '#kalender',
+        },
+        {
+          label: 'Kalender & Shift',
+          href: '/manajemen#kalender',
+          icon: <CalendarDays size={18} />,
+          match: (p, h) => p === '/manajemen' && h === '#kalender',
         },
         {
           label: 'Pengaturan Salon',
@@ -383,6 +402,19 @@ export function Shell({
 
   const isActive = (item: NavItem) => (item.match ? item.match(path, hash) : path === item.href);
 
+  const handleNavClick = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    setOpen(false);
+    const [targetPath, targetHash] = href.split('#');
+    if (targetPath === path) {
+      event.preventDefault();
+      const nextUrl = targetPath + (targetHash ? '#' + targetHash : '');
+      if (location.pathname + location.hash !== nextUrl) {
+        history.replaceState(null, '', nextUrl);
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      }
+    }
+  };
+
   if (isTeam) {
     return (
       <div className="m-app m-app-team">
@@ -410,6 +442,7 @@ export function Shell({
                     href={item.href}
                     className={`m-sidebar-link ${active ? 'is-active' : ''}`}
                     aria-current={active ? 'page' : undefined}
+                    onClick={(e) => handleNavClick(e, item.href)}
                   >
                     {item.icon}
                     <span>{item.label}</span>
@@ -464,7 +497,7 @@ export function Shell({
                             key={item.href}
                             href={item.href}
                             className={active ? 'is-active' : undefined}
-                            onClick={() => setOpen(false)}
+                            onClick={(e) => handleNavClick(e, item.href)}
                           >
                             <span>
                               {item.icon} {item.label}

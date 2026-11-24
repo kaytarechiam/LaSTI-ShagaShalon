@@ -5,13 +5,16 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Coffee,
   MessageSquare,
   Play,
   RefreshCw,
   Save,
   Settings,
   ShieldCheck,
+  Timer,
   UploadCloud,
+  Users,
 } from 'lucide-react';
 import {
   addDays,
@@ -32,6 +35,7 @@ import {
   type Reservation,
   type Rules,
   type SettlementReportResponse,
+  type TimeBlock,
 } from './api';
 import {
   CHART_TONES,
@@ -40,9 +44,17 @@ import {
   HorizontalMetricChart,
   HourlyScheduleChart,
 } from './components/Charts';
-import { EmptyState, MetricCard, Notice, PageHeader, StatusBadge } from './components/ui';
+import {
+  AppointmentQuickSheet,
+  BlockDetailModal,
+  BlockTimeModal,
+  CalendarToolbar,
+  DayResourceCalendar,
+  WeekTeamMatrix,
+} from './components/TeamCalendar';
+import { EmptyState, MetricCard, Modal, Notice, PageHeader, StatusBadge } from './components/ui';
 
-type ManagerSection = 'overview' | 'settings';
+type ManagerSection = 'overview' | 'calendar' | 'settings';
 type SettingsTab = 'rules' | 'services' | 'capsters';
 
 const RULES_FIELDS: Array<{ key: keyof Rules; label: string; unit: string; min: number; max: number }> = [
@@ -143,7 +155,11 @@ function buildBoardReportFallback(
 
 export function ManagerView() {
   const [section, setSection] = useState<ManagerSection>(() =>
-    location.hash === '#pengaturan' ? 'settings' : 'overview'
+    location.hash === '#pengaturan'
+      ? 'settings'
+      : location.hash === '#kalender'
+        ? 'calendar'
+        : 'overview'
   );
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('rules');
   const [currentDay, setCurrentDay] = useState(jakartaToday);
@@ -171,15 +187,52 @@ export function ManagerView() {
   const [settingsBusy, setSettingsBusy] = useState<'draft' | 'validate' | 'publish' | null>(null);
   const [conflicts, setConflicts] = useState<Array<{ code: string; day: string }>>([]);
 
+  // Calendar & Smart Scheduling state
+  const [calDay, setCalDay] = useState(currentDay);
+  const [calViewMode, setCalViewMode] = useState<'DAY' | 'WEEK'>('DAY');
+  const [calBoard, setCalBoard] = useState<OpsBoardResponse | null>(null);
+  const [calLoading, setCalLoading] = useState(false);
+  const [calAppointment, setCalAppointment] = useState<Reservation | null>(null);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [blockCapster, setBlockCapster] = useState('a');
+  const [blockDay, setBlockDay] = useState(currentDay);
+  const [blockStartMin, setBlockStartMin] = useState<number | undefined>(undefined);
+  const [blockTarget, setBlockTarget] = useState<TimeBlock | null>(null);
+
+  // Quick Shift Editor modal state
+  const [shiftModalOpen, setShiftModalOpen] = useState(false);
+  const [shiftTargetId, setShiftTargetId] = useState('a');
+  const [shiftStart, setShiftStart] = useState(9);
+  const [shiftEnd, setShiftEnd] = useState(18);
+  const [shiftOff, setShiftOff] = useState(1);
+  const [shiftActive, setShiftActive] = useState(true);
+  const [shiftBusy, setShiftBusy] = useState(false);
+  const [shiftError, setShiftError] = useState('');
+
+  // Quick Extra Time & Break Rules modal state
+  const [extraModalOpen, setExtraModalOpen] = useState(false);
+  const [extraBuffer, setExtraBuffer] = useState(15);
+  const [extraBreakStart, setExtraBreakStart] = useState(12);
+  const [extraBreakEnd, setExtraBreakEnd] = useState(13);
+  const [extraBusy, setExtraBusy] = useState(false);
+  const [extraError, setExtraError] = useState('');
+
   useEffect(() => {
-    const syncHash = () => setSection(location.hash === '#pengaturan' ? 'settings' : 'overview');
+    const syncHash = () =>
+      setSection(
+        location.hash === '#pengaturan'
+          ? 'settings'
+          : location.hash === '#kalender'
+            ? 'calendar'
+            : 'overview'
+      );
     window.addEventListener('hashchange', syncHash);
     return () => window.removeEventListener('hashchange', syncHash);
   }, []);
 
   const switchSection = (next: ManagerSection) => {
     setSection(next);
-    const targetHash = next === 'settings' ? '#pengaturan' : '';
+    const targetHash = next === 'settings' ? '#pengaturan' : next === 'calendar' ? '#kalender' : '';
     if (location.hash !== targetHash) {
       history.replaceState(null, '', '/manajemen' + targetHash);
       window.dispatchEvent(new HashChangeEvent('hashchange'));
@@ -232,6 +285,110 @@ export function ManagerView() {
   useEffect(() => {
     void loadAll(fromDay, toDay);
   }, [fromDay, toDay, section]);
+
+  const loadCalendar = async (targetDay = calDay, mode = calViewMode, silent = false) => {
+    if (!silent) setCalLoading(true);
+    const to = mode === 'WEEK' ? addDays(targetDay, 6) : targetDay;
+    try {
+      const data = await api<OpsBoardResponse>('/ops/board?' + new URLSearchParams({ day: targetDay, to }));
+      setCalBoard(data);
+    } catch (e) {
+      setNoticeTone('error');
+      setNotice(errorMessage(e));
+    } finally {
+      setCalLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (section === 'calendar') {
+      void loadCalendar(calDay, calViewMode);
+    }
+  }, [section, calDay, calViewMode]);
+
+  const openShiftEditor = (cap: OpsConfig['capsters'][0]) => {
+    setShiftTargetId(cap.id);
+    setShiftStart(cap.start);
+    setShiftEnd(cap.end);
+    setShiftOff(cap.off);
+    setShiftActive(cap.active);
+    setShiftError('');
+    setShiftModalOpen(true);
+  };
+
+  const openExtraEditor = () => {
+    const activeRules = (calBoard || board)?.settings.rules;
+    if (activeRules) {
+      setExtraBuffer(activeRules.buffer);
+      setExtraBreakStart(activeRules.breakStart);
+      setExtraBreakEnd(activeRules.breakEnd);
+    }
+    setExtraError('');
+    setExtraModalOpen(true);
+  };
+
+  const publishConfigUpdate = async (nextConfig: OpsConfig) => {
+    await api('/ops/draft', nextConfig);
+    const validation = await api<{ conflicts: Array<{ code: string; day: string }>; published: boolean }>(
+      '/ops/validate',
+      {}
+    );
+    if (validation.conflicts.length > 0) {
+      const list = validation.conflicts.map((c) => `${c.code} (${c.day})`).join(', ');
+      throw new Error(`Bentrok dengan reservasi aktif: ${list}`);
+    }
+    await api('/ops/publish', {});
+    setDirty(false);
+    setConflicts([]);
+    await Promise.all([loadCalendar(calDay, calViewMode, true), loadAll(fromDay, toDay, true)]);
+  };
+
+  const submitShiftEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    const baseCfg = (calBoard || board)?.settings;
+    if (!baseCfg) return;
+    setShiftBusy(true);
+    setShiftError('');
+    try {
+      const nextCapsters = baseCfg.capsters.map((c) =>
+        c.id === shiftTargetId
+          ? { ...c, start: shiftStart, end: shiftEnd, off: shiftOff, active: shiftActive }
+          : c
+      );
+      await publishConfigUpdate({ ...baseCfg, capsters: nextCapsters });
+      setShiftModalOpen(false);
+      setNoticeTone('success');
+      setNotice('Jadwal shift capster berhasil diperbarui.');
+    } catch (err) {
+      setShiftError(errorMessage(err));
+    } finally {
+      setShiftBusy(false);
+    }
+  };
+
+  const submitExtraRules = async (e: FormEvent) => {
+    e.preventDefault();
+    const baseCfg = (calBoard || board)?.settings;
+    if (!baseCfg) return;
+    setExtraBusy(true);
+    setExtraError('');
+    try {
+      const nextRules = {
+        ...baseCfg.rules,
+        buffer: extraBuffer,
+        breakStart: extraBreakStart,
+        breakEnd: extraBreakEnd,
+      };
+      await publishConfigUpdate({ ...baseCfg, rules: nextRules });
+      setExtraModalOpen(false);
+      setNoticeTone('success');
+      setNotice('Aturan waktu ekstra layanan dan jam istirahat berhasil diperbarui.');
+    } catch (err) {
+      setExtraError(errorMessage(err));
+    } finally {
+      setExtraBusy(false);
+    }
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -413,6 +570,10 @@ export function ManagerView() {
             <>
               Pengaturan <em>salon.</em>
             </>
+          ) : section === 'calendar' ? (
+            <>
+              Kalender &amp; <em>penjadwalan.</em>
+            </>
           ) : (
             <>
               Ringkasan &amp; <em>laporan.</em>
@@ -422,7 +583,9 @@ export function ManagerView() {
         description={
           section === 'settings'
             ? 'Ubah jam operasional, katalog layanan, dan jadwal capster melalui alur draf dan validasi konflik.'
-            : 'Pantau kondisi operasional harian, grafik kapasitas, pembayaran tercatat, serta ulasan pelanggan.'
+            : section === 'calendar'
+              ? 'Atur shift tim, pasang blok waktu & jam istirahat, dan kelola waktu ekstra antarlayanan dalam satu tampilan kalender.'
+              : 'Pantau kondisi operasional harian, grafik kapasitas, pembayaran tercatat, serta ulasan pelanggan.'
         }
         actions={
           <div className="m-segmented" role="tablist" aria-label="Mode manajemen">
@@ -434,6 +597,15 @@ export function ManagerView() {
               onClick={() => switchSection('overview')}
             >
               <BarChart3 size={15} /> Ringkasan &amp; Laporan
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={section === 'calendar'}
+              className={`m-seg-btn ${section === 'calendar' ? 'is-active' : ''}`}
+              onClick={() => switchSection('calendar')}
+            >
+              <CalendarDays size={15} /> Kalender &amp; Shift
             </button>
             <button
               type="button"
@@ -863,6 +1035,306 @@ export function ManagerView() {
             )}
           </section>
         </>
+      ) : section === 'calendar' ? (
+        <div className="m-stack-md">
+          {(() => {
+            const activeCalBoard = calBoard || board;
+            const calCapsters = activeCalBoard?.settings.capsters || [];
+            const activeRules = activeCalBoard?.settings.rules;
+            const activeBlocksCount = (activeCalBoard?.settings.blocks || []).filter(
+              (b) => b.day >= currentDay
+            ).length;
+            return (
+              <>
+                <section className="m-smart-grid" aria-label="Penjadwalan cerdas tim">
+                  <div className="m-smart-card">
+                    <div className="m-smart-icon" aria-hidden="true">
+                      <Users size={18} />
+                    </div>
+                    <div className="m-smart-body">
+                      <strong>Jadwalkan shift</strong>
+                      <p>Atur jam kerja &amp; hari libur mingguan tim capster secara terpadu.</p>
+                    </div>
+                    {calCapsters[0] && (
+                      <button
+                        type="button"
+                        className="m-secondary m-btn-sm"
+                        onClick={() => openShiftEditor(calCapsters[0])}
+                      >
+                        Atur shift
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="m-smart-card">
+                    <div className="m-smart-icon" aria-hidden="true">
+                      <Coffee size={18} />
+                    </div>
+                    <div className="m-smart-body">
+                      <strong>Blok waktu &amp; jam istirahat</strong>
+                      <p>
+                        {activeBlocksCount > 0
+                          ? `${activeBlocksCount} blok aktif tercatat mencegah pemesanan bentrok.`
+                          : 'Tambahkan istirahat, pelatihan, atau waktu terpesan dalam detik.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="m-secondary m-btn-sm"
+                      onClick={() => {
+                        setBlockCapster(calCapsters.find((c) => c.active)?.id || 'a');
+                        setBlockDay(calDay);
+                        setBlockStartMin(undefined);
+                        setBlockOpen(true);
+                      }}
+                    >
+                      + Blok waktu
+                    </button>
+                  </div>
+
+                  <div className="m-smart-card">
+                    <div className="m-smart-icon" aria-hidden="true">
+                      <Timer size={18} />
+                    </div>
+                    <div className="m-smart-body">
+                      <strong>Waktu ekstra layanan</strong>
+                      <p>
+                        {activeRules
+                          ? `Jeda antarsesi ${activeRules.buffer} mnt · Istirahat ${String(activeRules.breakStart).padStart(2, '0')}:00–${String(activeRules.breakEnd).padStart(2, '0')}:00 WIB`
+                          : 'Atur waktu persiapan & jeda realistis antarlayanan.'}
+                      </p>
+                    </div>
+                    <button type="button" className="m-secondary m-btn-sm" onClick={openExtraEditor}>
+                      Ubah jeda
+                    </button>
+                  </div>
+                </section>
+
+                <CalendarToolbar
+                  day={calDay}
+                  todayDay={currentDay}
+                  viewMode={calViewMode}
+                  onChangeDay={setCalDay}
+                  onChangeViewMode={setCalViewMode}
+                  onAddBlock={() => {
+                    setBlockCapster(calCapsters.find((c) => c.active)?.id || 'a');
+                    setBlockDay(calDay);
+                    setBlockStartMin(undefined);
+                    setBlockOpen(true);
+                  }}
+                />
+
+                {calLoading && !calBoard ? (
+                  <div className="m-loading-box" role="status">
+                    Memuat kalender &amp; shift tim…
+                  </div>
+                ) : activeCalBoard ? (
+                  calViewMode === 'DAY' ? (
+                    <DayResourceCalendar
+                      day={calDay}
+                      todayDay={currentDay}
+                      capsters={calCapsters.filter((c) => c.active)}
+                      rows={activeCalBoard.rows}
+                      blocks={activeCalBoard.settings.blocks || []}
+                      rules={activeCalBoard.settings.rules}
+                      onSelectAppointment={setCalAppointment}
+                      onEditShift={openShiftEditor}
+                      onAddBlock={(capId, sMin) => {
+                        setBlockCapster(capId);
+                        setBlockDay(calDay);
+                        setBlockStartMin(sMin);
+                        setBlockOpen(true);
+                      }}
+                      onSelectBlock={setBlockTarget}
+                    />
+                  ) : (
+                    <WeekTeamMatrix
+                      startDay={calDay}
+                      todayDay={currentDay}
+                      capsters={calCapsters.filter((c) => c.active)}
+                      rows={activeCalBoard.rows}
+                      blocks={activeCalBoard.settings.blocks || []}
+                      rules={activeCalBoard.settings.rules}
+                      onSelectDay={(selectedDay) => {
+                        setCalDay(selectedDay);
+                        setCalViewMode('DAY');
+                      }}
+                      onEditShift={openShiftEditor}
+                      onAddBlock={(capId, targetDay) => {
+                        setBlockCapster(capId);
+                        setBlockDay(targetDay);
+                        setBlockStartMin(undefined);
+                        setBlockOpen(true);
+                      }}
+                    />
+                  )
+                ) : null}
+
+                <AppointmentQuickSheet
+                  appointment={calAppointment}
+                  capsters={calCapsters}
+                  onClose={() => setCalAppointment(null)}
+                />
+
+                <BlockTimeModal
+                  open={blockOpen}
+                  onOpenChange={setBlockOpen}
+                  capsters={calCapsters.filter((c) => c.active)}
+                  initialCapster={blockCapster}
+                  initialDay={blockDay}
+                  initialStartMin={blockStartMin}
+                  minDay={currentDay}
+                  onCreated={() => loadCalendar(calDay, calViewMode, true)}
+                />
+
+                <BlockDetailModal
+                  block={blockTarget}
+                  capsters={calCapsters}
+                  canDelete={true}
+                  onClose={() => setBlockTarget(null)}
+                  onDeleted={() => loadCalendar(calDay, calViewMode, true)}
+                />
+
+                <Modal
+                  open={shiftModalOpen}
+                  onOpenChange={setShiftModalOpen}
+                  title="Jadwalkan shift capster"
+                  description="Ubah jam kerja harian dan hari libur mingguan. Perubahan divalidasi terhadap reservasi aktif sebelum diterapkan."
+                >
+                  <form className="m-form" onSubmit={submitShiftEdit}>
+                    <label>
+                      Pilih capster
+                      <select
+                        value={shiftTargetId}
+                        onChange={(e) => {
+                          const target = calCapsters.find((c) => c.id === e.target.value);
+                          setShiftTargetId(e.target.value);
+                          if (target) {
+                            setShiftStart(target.start);
+                            setShiftEnd(target.end);
+                            setShiftOff(target.off);
+                            setShiftActive(target.active);
+                          }
+                        }}
+                      >
+                        {calCapsters.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="m-grid-two">
+                      <label>
+                        Jam mulai (WIB)
+                        <input
+                          type="number"
+                          min={0}
+                          max={23}
+                          value={shiftStart}
+                          onChange={(e) => setShiftStart(Number(e.target.value))}
+                          required
+                        />
+                      </label>
+                      <label>
+                        Jam selesai (WIB)
+                        <input
+                          type="number"
+                          min={1}
+                          max={24}
+                          value={shiftEnd}
+                          onChange={(e) => setShiftEnd(Number(e.target.value))}
+                          required
+                        />
+                      </label>
+                    </div>
+                    <label>
+                      Hari libur mingguan
+                      <select value={shiftOff} onChange={(e) => setShiftOff(Number(e.target.value))}>
+                        {DAYS_OF_WEEK.map((d) => (
+                          <option key={d.value} value={d.value}>
+                            {d.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="m-checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={shiftActive}
+                        onChange={(e) => setShiftActive(e.target.checked)}
+                      />
+                      <span>Capster aktif melayani reservasi</span>
+                    </label>
+                    <Notice text={shiftError} />
+                    <div className="m-actions">
+                      <button type="submit" className="m-primary" disabled={shiftBusy}>
+                        {shiftBusy ? 'Memvalidasi & menyimpan…' : 'Simpan & terapkan shift'}
+                      </button>
+                      <button type="button" className="m-secondary" onClick={() => setShiftModalOpen(false)}>
+                        Batal
+                      </button>
+                    </div>
+                  </form>
+                </Modal>
+
+                <Modal
+                  open={extraModalOpen}
+                  onOpenChange={setExtraModalOpen}
+                  title="Waktu ekstra layanan &amp; jam istirahat"
+                  description="Tetapkan jeda standar persiapan antarlayanan serta rentang jam istirahat salon harian."
+                >
+                  <form className="m-form" onSubmit={submitExtraRules}>
+                    <label>
+                      Waktu ekstra / jeda antarlayanan (menit)
+                      <input
+                        type="number"
+                        min={0}
+                        max={120}
+                        value={extraBuffer}
+                        onChange={(e) => setExtraBuffer(Number(e.target.value))}
+                        required
+                      />
+                    </label>
+                    <div className="m-grid-two">
+                      <label>
+                        Mulai jam istirahat salon (WIB)
+                        <input
+                          type="number"
+                          min={0}
+                          max={24}
+                          value={extraBreakStart}
+                          onChange={(e) => setExtraBreakStart(Number(e.target.value))}
+                          required
+                        />
+                      </label>
+                      <label>
+                        Selesai jam istirahat salon (WIB)
+                        <input
+                          type="number"
+                          min={0}
+                          max={24}
+                          value={extraBreakEnd}
+                          onChange={(e) => setExtraBreakEnd(Number(e.target.value))}
+                          required
+                        />
+                      </label>
+                    </div>
+                    <Notice text={extraError} />
+                    <div className="m-actions">
+                      <button type="submit" className="m-primary" disabled={extraBusy}>
+                        {extraBusy ? 'Memvalidasi & menyimpan…' : 'Simpan & terapkan aturan'}
+                      </button>
+                      <button type="button" className="m-secondary" onClick={() => setExtraModalOpen(false)}>
+                        Batal
+                      </button>
+                    </div>
+                  </form>
+                </Modal>
+              </>
+            );
+          })()}
+        </div>
       ) : (
         <section className="m-settings-wrap">
           {!editConfig || !board ? (
