@@ -178,24 +178,26 @@ export function Modal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="m-overlay" />
-        <Dialog.Content className="m-modal" asChild>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.98, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ type: 'spring', duration: 0.35, bounce: 0 }}
-          >
-            <div className="m-modal-head">
-              <div>
-                <Dialog.Title className="m-modal-title">{title}</Dialog.Title>
-                {description && <Dialog.Description className="m-modal-desc">{description}</Dialog.Description>}
+        <div className="m-modal-stage">
+          <Dialog.Content className="m-modal" asChild>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ type: 'spring', duration: 0.35, bounce: 0 }}
+            >
+              <div className="m-modal-head">
+                <div>
+                  <Dialog.Title className="m-modal-title">{title}</Dialog.Title>
+                  {description && <Dialog.Description className="m-modal-desc">{description}</Dialog.Description>}
+                </div>
+                <Dialog.Close className="m-icon-button" aria-label="Tutup dialog">
+                  <X size={20} />
+                </Dialog.Close>
               </div>
-              <Dialog.Close className="m-icon-button" aria-label="Tutup dialog">
-                <X size={20} />
-              </Dialog.Close>
-            </div>
-            <div className="m-modal-body">{children}</div>
-          </motion.div>
-        </Dialog.Content>
+              <div className="m-modal-body">{children}</div>
+            </motion.div>
+          </Dialog.Content>
+        </div>
       </Dialog.Portal>
     </Dialog.Root>
   );

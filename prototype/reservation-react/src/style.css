@@ -469,21 +469,37 @@
 }
 
 /* Modal Dialog */
-.m-modal {
+.m-modal-stage {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(600px, calc(100vw - 28px));
-  max-height: min(88vh, 780px);
+  inset: 0;
+  z-index: 105;
+  display: grid;
+  place-items: center;
+  padding: 20px 14px;
+  pointer-events: none;
+  overflow-y: auto;
+}
+
+.m-modal {
+  position: relative;
+  pointer-events: auto;
+  width: min(580px, 100%);
+  max-height: min(86dvh, 760px);
   overflow-y: auto;
   overscroll-behavior: contain;
   background: var(--m-surface);
   border: 1px solid transparent;
   border-radius: var(--r-2xl);
-  padding: clamp(22px, 3.5vw, 32px);
-  z-index: 105;
+  padding: clamp(22px, 3.2vw, 30px);
   box-shadow: var(--shadow-modal);
+}
+
+.m-modal .m-detail-list {
+  margin: 14px 0 8px;
+}
+
+.m-modal .m-detail-list > div:last-child {
+  border-bottom: 0;
 }
 
 .m-modal-head {

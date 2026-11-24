@@ -963,7 +963,13 @@ export function AppointmentQuickSheet({
             )}
           </dl>
 
-          {children}
+          {children || (
+            <div className="m-actions">
+              <button type="button" className="m-secondary" onClick={onClose}>
+                Tutup
+              </button>
+            </div>
+          )}
         </div>
       )}
     </Modal>
