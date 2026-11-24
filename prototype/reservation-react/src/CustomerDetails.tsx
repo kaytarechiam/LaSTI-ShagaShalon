@@ -59,7 +59,7 @@ export function ReservationDetail({id,catalog}:{id:string;catalog:Catalog}) {
       {confirmed&&<div className="m-confirmed"><Check size={18}/> Kode reservasi <strong>{row.code}</strong></div>}
       <dl className="m-detail-list"><div><dt>Jadwal</dt><dd>{date.format(row.start)} · {time.format(row.start)} WIB</dd></div><div><dt>Capster</dt><dd>{capster}</dd></div>{row.items.map(item=><div key={item.id}><dt>{item.name}</dt><dd>{money.format(item.price)} · {item.duration} menit</dd></div>)}<div><dt>Total harga</dt><dd>{money.format(row.booked_price)}</dd></div><div><dt>Total durasi</dt><dd>{row.booked_duration} menit layanan · jeda salon {Math.max(0,(row.end-row.start)/60000-row.booked_duration)} menit</dd></div><div><dt>Nama</dt><dd>{row.name}</dd></div><div><dt>Nomor telepon</dt><dd>{row.phone}</dd></div></dl>
       {notice&&<p className="m-notice" role="alert">{notice}</p>}
-      {confirmed?<p className="m-muted">Notifikasi dicatat sebagai simulasi.</p>:<div className="m-actions">{!conflict&&<button className="m-primary" onClick={confirm} disabled={busy}>{busy?'Memeriksa…':'Konfirmasi reservasi'} <ArrowRight size={17}/></button>}<a className="m-secondary" href={'/reservasi?'+choices}>Kembali memilih jam</a></div>}
+      {confirmed?<p className="m-muted">Jadwal terkonfirmasi di sistem Shaga Salon.</p>:<div className="m-actions">{!conflict&&<button className="m-primary" onClick={confirm} disabled={busy}>{busy?'Memeriksa…':'Konfirmasi reservasi'} <ArrowRight size={17}/></button>}<a className="m-secondary" href={'/reservasi?'+choices}>Kembali memilih jam</a></div>}
     </section>
     {confirmed&&<Visit id={id}/>}
   </>;
