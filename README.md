@@ -1,156 +1,162 @@
 # Shaga Salon
 
-Shaga Salon adalah prototype sistem reservasi dan pengelolaan kunjungan salon.
-Pelanggan dapat memilih layanan, capster, dan jadwal; resepsionis membantu
-reservasi serta kedatangan; capster memperbarui pelayanan; dan manajemen
-memantau operasional.
+Aplikasi web terpadu untuk **reservasi layanan salon, manajemen antrean kunjungan, penjadwalan tim, penyelesaian kasir, dan pelaporan operasional** pada **Shaga Salon**.
 
-Antarmuka pelanggan sedang dimigrasikan secara bertahap ke React dan
-TypeScript dengan Vite, Tailwind CSS, Radix UI, Lucide, dan Motion. Halaman
-operasional tim masih menggunakan JavaScript sebelumnya. Landing page lokal
-menggunakan adaptasi ekspor Ixolyn/Webflow, dengan navigasi dan tautan yang
-terhubung ke reservasi Shaga Salon.
+- **Aplikasi Live (Vercel):** [shaga-salon.vercel.app](https://shaga-salon.vercel.app/)
+- **Database Produksi:** Neon PostgreSQL (`Asia/Jakarta` / WIB)
+- **Branch Utama:** `main`
 
-**Aplikasi yang sudah tersedia:** [shaga-salon.vercel.app](https://shaga-salon.vercel.app/)
+---
 
-Situs tersebut menampilkan versi yang sudah di-deploy. Perubahan pada komputer
-tidak otomatis muncul di sana sebelum di-deploy.
+## Akun Demo Sistem
 
-## Akun contoh
+Semua peran masuk melalui halaman login yang sama ([shaga-salon.vercel.app/login](https://shaga-salon.vercel.app/login)). Gunakan akun demo berikut untuk meninjau setiap alur:
 
-Akun berikut tersedia pada [situs demo Shaga Salon](https://shaga-salon.vercel.app/login). Semuanya menggunakan data contoh dan masuk melalui halaman yang sama.
+| Kelompok | Peran | Email | Kata Sandi | Akses Utama |
+| --- | --- | --- | --- | --- |
+| Pelanggan | Pelanggan | `pelanggan.demo@shaga.example` | `Pelanggan123!` | `/beranda`, `/reservasi`, `/akun`, `/profil` |
+| Tim Salon | Resepsionis & Kasir | `resepsionis.demo@shaga.example` | `Resepsionis123!` | `/resepsionis`, `/resepsionis#kalender`, `/reservasi` |
+| Tim Salon | Capster | `capster.demo@shaga.example` | `Capster123!` | `/capster`, `/capster#kalender`, `/profil` |
+| Tim Salon | Manajer | `manajer.demo@shaga.example` | `Manajer123!` | `/manajemen`, `/manajemen#kalender`, `/manajemen#pengaturan` |
 
-| Kelompok | Peran | Email | Kata sandi |
-| --- | --- | --- | --- |
-| Pelanggan | Pelanggan | pelanggan.demo@shaga.example | Pelanggan123! |
-| Tim salon | Resepsionis dan kasir | resepsionis.demo@shaga.example | Resepsionis123! |
-| Tim salon | Capster | capster.demo@shaga.example | Capster123! |
-| Tim salon | Manajer | manajer.demo@shaga.example | Manajer123! |
+> Akun di atas ditujukan untuk demonstrasi sistem. Hindari memasukkan data pribadi atau transaksi sensitif nyata.
 
-Kredensial ini bersifat publik. Siapa pun yang membacanya dapat mengakses dan mengubah data sesuai hak masing-masing peran, termasuk data operasional melalui akun manajer. Gunakan hanya untuk demonstrasi dan jangan masukkan data pelanggan atau transaksi nyata.
+---
 
-## Fitur
+## Fitur Utama
 
-- Katalog layanan, pencarian ketersediaan, reservasi, dan konfirmasi jadwal.
-- Check-in, antrean, penerimaan walk-in, dan pencatatan sesi pelayanan.
-- Pencatatan tagihan, koreksi, pembayaran, feedback, dan laporan operasional
-  pada versi pengembangan PostgreSQL terbaru.
-- Antrean diperbarui secara berkala saat halaman terbuka. Estimasi dapat berubah.
+### 1. Pelanggan (`/beranda`, `/reservasi`, `/akun`, `/profil`)
+- **Landing Page & Pemesanan Terhubung**: Jelajahi katalog layanan langsung dari halaman utama dan lanjutkan ke pemesanan sambil mempertahankan pilihan layanan sebelumnya.
+- **Reservasi Multi-Layanan**: Pencarian layanan, filter durasi (`≤ 45 menit` / `> 45 menit`), penjumlahan total harga dan durasi otomatis, pilihan tanggal cepat, serta pilihan capster yang kompeten.
+- **Pemeriksaan Slot & Konfirmasi Anti-Bentrok**: Ketersediaan jam WIB dihitung real-time berdasarkan shift capster, jam istirahat salon, blok waktu tim, jeda antarlayanan (*buffer*), dan reservasi aktif. Slot baru dikunci secara atomik saat tahap konfirmasi.
+- **Pemantauan Kunjungan, Tagihan & Ulasan**: Kartu progres reservasi 4 tahap, status antrean aktif, rincian tagihan lunas, serta pengisian rating dan komentar setelah layanan selesai dan dibayar lunas.
 
-Pembayaran dicatat setelah penerimaannya dipastikan petugas; aplikasi tidak
-memproses dana melalui bank atau payment gateway. Notifikasi reservasi masih
-berupa simulasi. Fitur tambahan terbaru memerlukan migrasi database dan belum
-tentu tersedia di situs yang sudah di-deploy.
+### 2. Resepsionis & Kasir (`/resepsionis`, `#antrean`, `#kalender`)
+- **Meja Resepsionis & Antrean Harian**: Ringkasan KPI hari berjalan, grafik kepadatan jam operasional dan beban capster, pencarian berdasarkan nama/kode/telepon, check-in reservasi terkonfirmasi, serta penerimaan **walk-in** idempoten.
+- **Penyelesaian Kasir**: Pembuatan tagihan dari rincian layanan, pencatatan koreksi nominal disertai alasan, dan konfirmasi pencatatan pembayaran (`Tunai`, `Transfer`, `Lainnya`) setelah dana diverifikasi petugas.
+- **Kalender Salon (`#kalender`)**: Tampilan kalender harian multi-capster dan matriks mingguan 7 hari lengkap dengan status shift/libur serta pengelolaan blok waktu tim.
 
-## Menjalankan secara lokal
+### 3. Capster (`/capster`, `#kalender`)
+- **Ruang Kerja Pelayanan**: Pengaturan status kesiapan melayani (*Ready / Paused*), kartu sorotan sesi aktif, serta tombol `Mulai sesi`, `Selesaikan sesi`, dan penyesuaian layanan hasil konsultasi pelanggan.
+- **Kalender Saya (`#kalender`)**: Timeline jadwal harian personal per jam (WIB) untuk memantau siapa yang dilayani hari ini, melihat jam istirahat, menambah blok waktu pribadi, serta memperbarui **waktu ekstra layanan** (`+10 / +15 / +30 menit`) secara langsung.
 
-Persyaratan: Node.js, npm, dan database PostgreSQL pengembangan terpisah
-untuk mencoba semua fitur terbaru. Gunakan connection string milik sendiri,
-jangan memasukkannya ke Git.
+### 4. Manajer & Penjadwalan Cerdas (`/manajemen`, `#kalender`, `#pengaturan`)
+- **Ringkasan & Laporan Operasional**: Filter periode `Hari ini`, `7 hari`, `30 hari`, dan rentang kustom hingga `90 hari`. Dilengkapi grafik SVG interaktif (tren kunjungan harian, komposisi status jadwal, beban layanan per capster, layanan paling diminati, pembayaran lunas per hari, metode pembayaran) beserta tabel data aksesibel dan tindak lanjut ulasan pelanggan.
+- **Kalender & Penjadwalan Cerdas (`#kalender`)**:
+  - **Jadwalkan Shift**: Atur jam mulai, jam selesai, hari libur mingguan, dan status aktif capster dengan validasi bentrok otomatis.
+  - **Blok Waktu & Jam Istirahat**: Tambahkan istirahat tambahan, pelatihan tim, izin khusus, atau waktu terpesan agar slot tertutup otomatis bagi pemesanan pelanggan.
+  - **Waktu Ekstra Layanan**: Konfigurasikan jeda persiapan antarlayanan (*buffer*) dan jam istirahat harian salon.
+- **Pengaturan Salon (`#pengaturan`)**: Pengubahan jam operasional, katalog layanan, dan kompetensi capster melalui alur 3 langkah *Simpan Draf → Periksa Konflik → Terapkan*.
+
+---
+
+## Teknologi & Arsitektur
+
+- **Frontend Aplikasi:** React 19, TypeScript, Vite 8, Tailwind CSS 4, Radix UI (`@radix-ui/react-dialog`), Lucide React, Motion, dan komponen grafik SVG kustom.
+- **Landing Page & Halaman Publik:** HTML/CSS/JS statis teroptimasi dengan navigasi dan CTA yang terhubung langsung ke alur reservasi.
+- **Backend & API:** Node.js ES Modules, Vercel Serverless Function (`prototype/api/index.js`), PostgreSQL (`pg`) pada **Neon**, serta dukungan SQLite lokal bawaan Node (`node:sqlite`) untuk pengembangan tanpa koneksi database eksternal.
+- **Keamanan & Konsistensi Data:** Cookie sesi `HttpOnly`, proteksi brute-force `auth_attempts`, hashing kata sandi `scrypt` per-pengguna, serta PostgreSQL `EXCLUDE USING gist` pada tabel `allocations` untuk mencegah double-booking secara konkuren.
+
+---
+
+## Struktur Folder
+
+```text
+LaSTI-ShagaShalon/
+├── README.md
+├── docs/                                # Dokumen kebutuhan, SOAML, dan referensi UI/UX
+├── prototype/
+│   ├── api/
+│   │   └── index.js                     # Entry point serverless Vercel (/api/*)
+│   ├── assets/                          # Font (Inter Variable), ilustrasi, gambar, video
+│   ├── backend/
+│   │   ├── catalog.js                   # Definisi katalog awal, capster, & generator slot WIB
+│   │   ├── operations.js                # Logika operasional & penjadwalan (SQLite lokal)
+│   │   ├── reservation-api.js           # HTTP handler & autentikasi (SQLite lokal)
+│   │   └── postgres/                    # Backend produksi PostgreSQL / Neon
+│   │       ├── 001-schema.sql           # Skema inti (accounts, reservations, allocations, visits)
+│   │       ├── 002-auth-attempts.sql    # Tabel pembatasan percobaan login
+│   │       ├── 003-settlement.sql       # Skema tagihan, pembayaran, & feedback
+│   │       ├── 004-report-indexes.sql   # Indeks query laporan periode
+│   │       ├── operations.js            # Operasional & penjadwalan PostgreSQL
+│   │       ├── reservation-api.js       # Router API PostgreSQL
+│   │       ├── scheduling.js            # Validasi slot, buffer, & blok waktu
+│   │       └── settlement.js            # Tagihan, pembayaran, ulasan, & laporan manajer
+│   ├── reservation-react/               # Sumber kode frontend pasca-login & autentikasi (React + TS)
+│   │   ├── tsconfig.json
+│   │   └── src/
+│   │       ├── api.ts                   # Klien API, tipe TypeScript, & helper format WIB
+│   │       ├── main.tsx                 # Router per peran & layar autentikasi
+│   │       ├── style.css                # Token visual Shaga Salon, komponen UI, & gaya kalender
+│   │       ├── CustomerViews.tsx        # Beranda, alur reservasi, riwayat, detail, & profil
+│   │       ├── StaffDeskView.tsx        # Meja resepsionis, walk-in, kasir, & kalender salon
+│   │       ├── CapsterView.tsx          # Ruang kerja capster & kalender saya
+│   │       ├── ManagerView.tsx          # Ringkasan laporan, penjadwalan cerdas, & pengaturan
+│   │       └── components/
+│   │           ├── ui.tsx               # Shell navigasi, modal dialog, badge, & kartu metrik
+│   │           ├── Charts.tsx           # Grafik SVG operasional & laporan + tabel aksesibel
+│   │           └── TeamCalendar.tsx     # Timeline harian, matriks mingguan, & modal blok waktu
+│   ├── reservation-ui/                  # Entry HTML shell & hasil build Vite (`modern/`)
+│   ├── subpages/                        # Halaman detail layanan, kondisi, praktisi, & jurnal
+│   ├── index.html                       # Landing page publik Shaga Salon
+│   ├── serve.js                         # Server lokal untuk pengembangan & pratinjau
+│   ├── vercel.json                      # Konfigurasi routing & header keamanan Vercel
+│   ├── package.json
+│   ├── NEON-VERCEL.md                   # Panduan setup & migrasi database Neon + Vercel
+│   └── OPERASIONAL.md                   # Catatan alur operasional & pembuatan akun tim
+└── tests/
+    ├── unit/                            # Pengujian unit API, akun, rute Vercel, & blok waktu
+    └── integration/                     # Pengujian integrasi reservasi & PostgreSQL
+```
+
+---
+
+## Menjalankan Secara Lokal
+
+### Prasyarat
+- Node.js versi 22+ dan `npm`.
+- (Opsional) Connection string PostgreSQL / Neon terpisah bila ingin menguji fitur tagihan kasir, pembayaran, dan laporan PostgreSQL penuh secara lokal. Tanpa `DATABASE_URL`, server otomatis memakai database SQLite lokal di `$env:LOCALAPPDATA\ShagaSalonPrototype`.
+
+### Instalasi & Build
 
 ```powershell
 cd prototype
 npm ci
-$env:DATABASE_URL = Read-Host 'Connection string PostgreSQL pengembangan'
+npm run build:app
+```
+
+### Menjalankan Server Pratinjau
+
+```powershell
+cd prototype
+# Opsional: hubungkan ke branch PostgreSQL / Neon pengembangan
+# $env:DATABASE_URL = Read-Host 'Connection string Neon pengembangan' -MaskInput
 npm run serve
 ```
 
-Buka alamat lokal yang ditampilkan di terminal, biasanya
-[http://127.0.0.1:3000](http://127.0.0.1:3000). Untuk menghentikan server,
-tekan `Ctrl+C`. Tanpa `DATABASE_URL`, server memakai SQLite untuk demo
-reservasi lama; fitur tagihan, feedback, laporan, dan antrean terbaru
-memerlukan PostgreSQL.
+Aplikasi akan berjalan di [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
-`npm run serve` membangun antarmuka React terlebih dahulu. Untuk memeriksa
-tipe atau membangun ulang secara terpisah, jalankan `npm run typecheck`
-atau `npm run build:app` dari folder `prototype`. Hasil build dibuat
-secara lokal dan tidak disimpan dalam Git; Vercel menjalankan build saat deploy.
-
-Untuk database pengembangan baru yang masih kosong, siapkan `DATABASE_URL`
-lalu jalankan `npm run db:init:dev` sekali sebelum menjalankan server.
-Untuk database yang sudah memiliki skema sebelumnya, terapkan migrasi
-`prototype/backend/postgres/003-settlement.sql` dan kemudian
-`prototype/backend/postgres/004-report-indexes.sql` sebelum menjalankan versi
-baru. Jangan menjalankan ulang skema awal pada database yang berisi data.
-Petunjuk lengkap ada di [panduan Neon dan Vercel](prototype/NEON-VERCEL.md).
-
-## Pengujian
+### Menjalankan Pengujian
 
 ```powershell
 cd prototype
 npm test
 ```
 
-Pengujian PostgreSQL membutuhkan database pengujian terpisah dan variabel
-lingkungan tambahan sebagaimana dijelaskan dalam panduan Neon dan Vercel.
-Tanpa konfigurasi itu, pengujian integrasi PostgreSQL akan dilewati.
-
-## Peran dan batasan
-
-Pelanggan dapat memberikan feedback setelah kunjungan yang terhubung ke
-akunnya selesai dan pembayaran telah dicatat lunas oleh petugas. Feedback lama
-yang dibuat sebelum aturan ini tetap tersimpan dan dapat ditampilkan. Reservasi atau walk-in yang dibuat melalui akun staf belum
-otomatis terhubung ke akun pelanggan; pencocokan nama atau telepon tidak
-digunakan sebagai bukti kepemilikan. Resepsionis merangkap kasir dalam
-prototype ini.
-
-Dashboard manajemen otomatis memuat hari ini dalam zona Asia/Jakarta; rentang
-kustom dibatasi 90 hari. Reservasi dan kunjungan dihitung berdasarkan tanggal
-kunjungan, pembayaran dan feedback menurut waktu pencatatannya, dan tagihan
-menurut waktu dibuat. Jumlah tagihan belum lunas menunjukkan kondisi terkini
-untuk tagihan yang dibuat pada periode itu. Total pembayaran hanya mencakup
-pembayaran yang telah dicatat, bukan tagihan yang belum lunas. Grafik dan tabel
-menggunakan data yang sama: jumlah kunjungan berdasarkan tanggal kunjungan,
-total lunas berdasarkan waktu pencatatan, dan layanan terpopuler berdasarkan
-kunjungan selesai pada tanggal kunjungan. Tidak ada perhitungan laba atau biaya.
-
-Rancangan proses bisnis yang lebih luas dijelaskan dalam
-[laporan Delivery 2](https://docs.google.com/document/d/1dqlcNDuBCY4aRa1RYe-p2kPp_U5ttwUdygrirpaqWwg/edit?tab=t.siyltlcmt1c1).
-Bab VI laporan membatasi prototype awal pada konfirmasi reservasi; fitur
-operasional dan penyelesaian transaksi merupakan perluasan dari cakupan itu.
-
-Font antarmuka aplikasi menggunakan Inter Variable, mengikuti referensi UniSpot.
-Berkas font disimpan lokal dari
-[UniSpot](https://github.com/AthallaAnanda/UniSpot); lisensinya tersedia
-di [INTER-LICENSE.txt](prototype/assets/fonts/INTER-LICENSE.txt).
-
-## Landing page dan aset
-
-Halaman utama lokal memakai ekspor halaman blog Ixolyn/Webflow, termasuk
-navbar, footer, gambar, video, dan runtime interaksinya. Teks dan tautan
-disesuaikan ke konteks Shaga Salon; font antarmuka memakai Inter. Logo teks
-Shaga Salon baru digunakan pada landing dan halaman masuk. Aset pada
-[`prototype/landing-webflow/`](prototype/landing-webflow/) adalah aset template,
-bukan foto asli salon. Ketentuan lisensi template dan aset perlu diverifikasi sebelum
-publikasi.
-
-Salinan ekspor utuh tersimpan secara lokal di `prototype/landing-original/`
-sebagai pembanding. Folder tersebut dikecualikan dari Git dan ditolak oleh
-server aplikasi; tidak otomatis ikut ketika repository di-clone. Aset misc
-export yang tidak diperlukan landing juga dikecualikan dan tidak disajikan.
-Video hero memiliki kontrol bawaan template. Kartu merupakan pengantar;
-layanan aktif dan harga yang berlaku ditampilkan saat membuka reservasi.
-
-Sumber ekspor menyebutkan bahwa akun dan pemrosesan formulir server-side tidak
-ikut diekspor; login dan reservasi menggunakan backend Shaga Salon. Tombol
-reservasi menggantikan formulir newsletter template. Halaman lama di
-`prototype/subpages/` masih menggunakan desain sebelumnya dan belum dimigrasi.
-
-## Menyimpan perubahan ke GitHub
-
-Periksa seluruh perubahan terlebih dahulu, terutama file baru dan konfigurasi.
-Pastikan tidak ada `.env`, kata sandi, atau connection string yang ikut masuk.
-Di terminal PowerShell, dari root repository:
+Untuk menyertakan pengujian integrasi dan konkurensi PostgreSQL:
 
 ```powershell
-git status
-git diff
-git add .
-git status
-git commit -m "Update Shaga Salon frontend"
-git push -u origin fitur/operasional-shaga
+$env:TEST_DATABASE_URL = Read-Host 'Connection string database pengujian' -MaskInput
+$env:SHAGA_TEST_DISPOSABLE = 'yes'
+npm test
+Remove-Item Env:TEST_DATABASE_URL, Env:SHAGA_TEST_DISPOSABLE
 ```
 
-Perintah tersebut memakai branch `fitur/operasional-shaga` yang aktif saat
-dokumentasi ini ditulis. Periksa `git branch --show-current` dan sesuaikan
-nama branch sebelum push jika sudah berpindah branch.
+---
+
+## Aturan Operasional & Catatan Teknis
+
+- **Zona Waktu & Periode:** Seluruh jadwal slot, check-in, transaksi, dan laporan memakai zona waktu **Asia/Jakarta (WIB)**.
+- **Pembayaran Kasir:** Pencatatan pembayaran hanya merekam dana yang telah diverifikasi dan diterima petugas (`CASH`, `TRANSFER`, `OTHER`); sistem tidak memotong saldo bank atau gateway eksternal secara otomatis.
+- **Lisensi Font:** Font antarmuka memakai *Inter Variable* ([`prototype/assets/fonts/INTER-LICENSE.txt`](prototype/assets/fonts/INTER-LICENSE.txt)).
+- **Dokumentasi Pendukung:** Lihat [`prototype/NEON-VERCEL.md`](prototype/NEON-VERCEL.md) untuk inisialisasi skema Neon & lingkungan preview, serta [`prototype/OPERASIONAL.md`](prototype/OPERASIONAL.md) untuk panduan pengelolaan akun tim.
